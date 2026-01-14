@@ -1,0 +1,31 @@
+name: dart_tree_gen
+description: Code generator for dart_tree - automatically generates TreeNode
+  classes and conversion logic from TreeObject definitions.
+version: 1.0.0
+repository: https://github.com/your-org/dart_tree_gen
+
+environment:
+  sdk: ^3.9.2
+
+dependencies:
+  analyzer: ^9.0.0
+  args: ^2.5.0
+  build: ^4.0.0
+  code_builder: ^4.11.0
+  dart_style: ^3.1.1
+  dart_tree:
+    path: ../dart_tree
+  glob: ^2.1.2
+  meta: ^1.17.0
+  path: ^1.9.1
+  recase: ^4.1.0
+  source_gen: ^4.0.0
+
+executables:
+  generate:
+
+dev_dependencies:
+  build_runner: ^2.4.0
+  build_test: ^3.3.3
+  lints: ^6.0.0
+  test: ^1.25.6

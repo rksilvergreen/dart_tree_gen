@@ -1,0 +1,38 @@
+# Build configuration for dart_tree_gen
+#
+# **DEPRECATED**: build_runner integration is deprecated.
+# Use the standalone generator instead:
+#
+#   dart run dart_tree_gen:generate --directory lib
+#
+# The builders below are kept for backward compatibility only.
+#
+builders:
+  # Multi-file schema builder - generates separate files
+  schema_marker:
+    import: "package:dart_tree_gen/builder.dart"
+    builder_factories: ["schemaMarkerBuilder"]
+    build_extensions: { ".dart": [".schema_gen.json"] }
+    auto_apply: dependents
+    build_to: source
+    # Allow generating additional non-declared outputs
+    required_inputs: []
+
+  # Legacy schema builder for @schema annotations (part file generation)
+  # Disabled in favor of multi_file_schema_builder
+  # schema_builder:
+  #   import: "package:dart_tree_gen/builder.dart"
+  #   builder_factories: ["schemaBuilder"]
+  #   build_extensions: { ".dart": [".schema.g.part"] }
+  #   auto_apply: dependents
+  #   build_to: cache
+  #   applies_builders: ["source_gen|combining_builder"]
+
+  # Legacy builder for @treeObject annotations (disabled during migration)
+  # dart_tree_builder:
+  #   import: "package:dart_tree_gen/builder.dart"
+  #   builder_factories: ["treeObjectBuilder"]
+  #   build_extensions: { ".dart": [".tree.g.part"] }
+  #   auto_apply: dependents
+  #   build_to: cache
+  #   applies_builders: ["source_gen|combining_builder"]
