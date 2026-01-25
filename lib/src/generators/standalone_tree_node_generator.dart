@@ -33,6 +33,8 @@ class StandaloneTreeNodeGenerator {
       if (property.referencedSchema != null) {
         if (property.type == SchemaType.object || property.type == SchemaType.union || property.type == SchemaType.array) {
           importedNodes.add(property.referencedSchema!.title);
+          // Also import the object class for setters
+          importedObjects.add(property.referencedSchema!.title);
         }
         
         // If this property is a union, also import all its member types
@@ -46,6 +48,10 @@ class StandaloneTreeNodeGenerator {
             }
           }
         }
+      } else if (property.type == SchemaType.array) {
+        // For array properties, import the list object class
+        final className = _capitalize(property.name);
+        importedObjects.add('${className}List');
       }
     }
     

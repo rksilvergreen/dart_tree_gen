@@ -49,6 +49,11 @@ class TreeNodeClassGenerator {
 
     buffer.writeln();
 
+    // Generate setters for object/array/union types
+    _generateObjectSetters(buffer);
+
+    buffer.writeln();
+
     // Generate toObject method
     _generateToObjectMethod(buffer);
 
@@ -500,6 +505,72 @@ class TreeNodeClassGenerator {
     }
   }
 
+  /// Generates setter methods for non-value type properties (objects, arrays, unions).
+  void _generateObjectSetters(StringBuffer buffer) {
+    for (final property in schema.properties.values) {
+      // Only generate setters for non-value types
+      if (_isValueType(property.type)) continue;
+
+      final objectType = _getObjectType(property);
+      final nullMark = property.nullable ? '?' : '';
+      final escapedName = _escapePropertyName(property.name);
+      final nodeType = _getNodeType(property);
+      final isUnion = property.type == SchemaType.union;
+
+      buffer.writeln('  set ${property.name}($objectType$nullMark value) {');
+
+      if (property.nullable) {
+        buffer.writeln('    if (value == null) {');
+        buffer.writeln('      // Remove node from tree');
+        buffer.writeln('      final tree = this.\$tree;');
+        buffer.writeln('      if (tree != null) {');
+        // For union properties, get the underlying node from $children
+        if (isUnion) {
+          buffer.writeln('        final oldNode = this.\$children?[\'$escapedName\'] as TreeNode?;');
+        } else {
+          buffer.writeln('        final oldNode = this.${property.name};');
+        }
+        buffer.writeln('        if (oldNode != null) {');
+        buffer.writeln('          tree.removeSubtree(oldNode);');
+        buffer.writeln('        }');
+        buffer.writeln('      }');
+        buffer.writeln('      return;');
+        buffer.writeln('    }');
+      }
+
+      // Create subtree from object
+      buffer.writeln('    final tree = this.\$tree;');
+      buffer.writeln('    if (tree != null) {');
+      // For union properties, get the underlying node from $children
+      if (isUnion) {
+        buffer.writeln('      final oldNode = this.\$children?[\'$escapedName\'] as TreeNode?;');
+      } else {
+        buffer.writeln('      final oldNode = this.${property.name};');
+      }
+      buffer.writeln('      final tempTree = Tree(root: value);');
+      buffer.writeln('      final rootNode = tempTree.root;');
+      buffer.writeln('      if (rootNode != null) {');
+      buffer.writeln('        final subtree = tempTree.removeSubtree(rootNode);');
+
+      if (property.nullable) {
+        buffer.writeln('        if (oldNode != null) {');
+        buffer.writeln('          // Replace existing node');
+        buffer.writeln('          tree.replaceSubtree(node: oldNode, newSubtree: subtree);');
+        buffer.writeln('        } else {');
+        buffer.writeln('          // Add new node (property was null before)');
+        buffer.writeln('          tree.addSubtree(parent: this, key: \'$escapedName\', subtree: subtree);');
+        buffer.writeln('        }');
+      } else {
+        buffer.writeln('        tree.replaceSubtree(node: oldNode, newSubtree: subtree);');
+      }
+
+      buffer.writeln('      }');
+      buffer.writeln('    }');
+      buffer.writeln('  }');
+      buffer.writeln();
+    }
+  }
+
   /// Generates the toObject method.
   void _generateToObjectMethod(StringBuffer buffer) {
     buffer.writeln('  ${schema.title}Object toObject() => ${schema.title}Object(');
@@ -629,6 +700,12 @@ class TreeNodeClassGenerator {
       case SchemaType.object:
         return '${property.referencedSchema!.title}Object';
       case SchemaType.array:
+        if (property.referencedSchema != null) {
+          final capitalizedName = property.name.isEmpty
+              ? property.name
+              : property.name[0].toUpperCase() + property.name.substring(1);
+          return '${capitalizedName}ListObject';
+        }
         return 'ListObject<TreeObject>';
       case SchemaType.union:
         if (property.referencedSchema != null) {
