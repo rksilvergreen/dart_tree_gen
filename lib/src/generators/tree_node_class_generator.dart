@@ -44,12 +44,12 @@ class TreeNodeClassGenerator {
 
     buffer.writeln();
 
-    // Generate setters for value types
+    // Generate set methods for value types
     _generateSetters(buffer);
 
     buffer.writeln();
 
-    // Generate setters for object/array/union types
+    // Generate set methods for object/array/union types
     _generateObjectSetters(buffer);
 
     buffer.writeln();
@@ -448,11 +448,13 @@ class TreeNodeClassGenerator {
       // Only generate setters for value types (primitives)
       if (!_isValueType(property.type)) continue;
 
-      final dartValueType = _getDartValueType(property);
+      final objectType = _getObjectType(property);
       final nullMark = property.nullable ? '?' : '';
       final escapedName = _escapePropertyName(property.name);
+      final capitalizedName = property.name[0].toUpperCase() + property.name.substring(1);
 
-      buffer.writeln('  set ${property.name}($dartValueType$nullMark value) {');
+      buffer.writeln('  Tree? set$capitalizedName($objectType$nullMark value) {');
+      buffer.writeln('    Tree? removedSubtree;');
 
       if (property.nullable) {
         buffer.writeln('    if (value == null) {');
@@ -461,45 +463,41 @@ class TreeNodeClassGenerator {
         buffer.writeln('      if (tree != null) {');
         buffer.writeln('        final oldNode = this.${property.name};');
         buffer.writeln('        if (oldNode != null) {');
-        buffer.writeln('          tree.removeSubtree(oldNode);');
+        buffer.writeln('          removedSubtree = tree.removeSubtree(oldNode);');
         buffer.writeln('        }');
         buffer.writeln('      }');
-        buffer.writeln('      return;');
+        buffer.writeln('      return removedSubtree;');
         buffer.writeln('    }');
       }
 
       // Generate validation
-      final validation = _generateSetterValidation(property, 'value');
+      final validation = _generateSetterValidation(property, 'value.value');
       if (validation.isNotEmpty) {
         buffer.writeln('    $validation');
       }
 
       // Replace the node in the tree
-      final objectType = _getObjectType(property);
-
       buffer.writeln('    final tree = this.\$tree;');
       buffer.writeln('    if (tree != null) {');
       buffer.writeln('      final oldNode = this.${property.name};');
 
       if (property.nullable) {
-        buffer.writeln('      final object = $objectType(value);');
         buffer.writeln('      if (oldNode != null) {');
         buffer.writeln('        // Replace existing node');
-        buffer.writeln('        final newSubtree = Tree(root: object);');
-        buffer.writeln('        tree.replaceSubtree(node: oldNode, newSubtree: newSubtree);');
+        buffer.writeln('        final newSubtree = Tree(root: value);');
+        buffer.writeln('        removedSubtree = tree.replaceSubtree(node: oldNode, newSubtree: newSubtree);');
         buffer.writeln('      } else {');
         buffer.writeln('        // Add new node (property was null before)');
-        buffer.writeln('        final newSubtree = Tree(root: object);');
+        buffer.writeln('        final newSubtree = Tree(root: value);');
         buffer.writeln('        tree.addSubtree(parent: this, key: \'$escapedName\', subtree: newSubtree);');
         buffer.writeln('      }');
       } else {
-        buffer.writeln('      final object = $objectType(value);');
-        buffer.writeln('      final newSubtree = Tree(root: object);');
-        buffer.writeln('      tree.replaceSubtree(node: oldNode, newSubtree: newSubtree);');
+        buffer.writeln('      final newSubtree = Tree(root: value);');
+        buffer.writeln('      removedSubtree = tree.replaceSubtree(node: oldNode, newSubtree: newSubtree);');
       }
 
       buffer.writeln('    }');
-
+      buffer.writeln('    return removedSubtree;');
       buffer.writeln('  }');
       buffer.writeln();
     }
@@ -516,8 +514,10 @@ class TreeNodeClassGenerator {
       final escapedName = _escapePropertyName(property.name);
       final nodeType = _getNodeType(property);
       final isUnion = property.type == SchemaType.union;
+      final capitalizedName = property.name[0].toUpperCase() + property.name.substring(1);
 
-      buffer.writeln('  set ${property.name}($objectType$nullMark value) {');
+      buffer.writeln('  Tree? set$capitalizedName($objectType$nullMark value) {');
+      buffer.writeln('    Tree? removedSubtree;');
 
       if (property.nullable) {
         buffer.writeln('    if (value == null) {');
@@ -531,10 +531,10 @@ class TreeNodeClassGenerator {
           buffer.writeln('        final oldNode = this.${property.name};');
         }
         buffer.writeln('        if (oldNode != null) {');
-        buffer.writeln('          tree.removeSubtree(oldNode);');
+        buffer.writeln('          removedSubtree = tree.removeSubtree(oldNode);');
         buffer.writeln('        }');
         buffer.writeln('      }');
-        buffer.writeln('      return;');
+        buffer.writeln('      return removedSubtree;');
         buffer.writeln('    }');
       }
 
@@ -555,17 +555,18 @@ class TreeNodeClassGenerator {
       if (property.nullable) {
         buffer.writeln('        if (oldNode != null) {');
         buffer.writeln('          // Replace existing node');
-        buffer.writeln('          tree.replaceSubtree(node: oldNode, newSubtree: subtree);');
+        buffer.writeln('          removedSubtree = tree.replaceSubtree(node: oldNode, newSubtree: subtree);');
         buffer.writeln('        } else {');
         buffer.writeln('          // Add new node (property was null before)');
         buffer.writeln('          tree.addSubtree(parent: this, key: \'$escapedName\', subtree: subtree);');
         buffer.writeln('        }');
       } else {
-        buffer.writeln('        tree.replaceSubtree(node: oldNode, newSubtree: subtree);');
+        buffer.writeln('        removedSubtree = tree.replaceSubtree(node: oldNode, newSubtree: subtree);');
       }
 
       buffer.writeln('      }');
       buffer.writeln('    }');
+      buffer.writeln('    return removedSubtree;');
       buffer.writeln('  }');
       buffer.writeln();
     }
