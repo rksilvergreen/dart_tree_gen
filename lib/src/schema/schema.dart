@@ -1,5 +1,11 @@
 // enum ????
 
+class $Tree {
+  final Map<String, $Schema> schemas;
+
+  const $Tree({required this.schemas});
+}
+
 class _Schema {
   const _Schema();
 }
