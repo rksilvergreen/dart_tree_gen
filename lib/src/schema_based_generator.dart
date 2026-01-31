@@ -105,10 +105,18 @@ class SchemaBasedGenerator extends Generator {
 
     // Handle value objects
     buffer.writeln('    // Handle value objects');
-    buffer.writeln('    if (object is StringValue) return (StringValueNode(object.value, jsonStringStyle: object.jsonStringStyle, yamlStringStyle: object.yamlStringStyle), []);');
-    buffer.writeln('    if (object is IntValue) return (IntValueNode(object.value, jsonNumberStyle: object.jsonNumberStyle, yamlNumberStyle: object.yamlNumberStyle), []);');
-    buffer.writeln('    if (object is DoubleValue) return (DoubleValueNode(object.value, jsonNumberStyle: object.jsonNumberStyle, yamlNumberStyle: object.yamlNumberStyle), []);');
-    buffer.writeln('    if (object is BoolValue) return (BoolValueNode(object.value, yamlBoolStyle: object.yamlBoolStyle), []);');
+    buffer.writeln(
+      '    if (object is StringValue) return (StringValueNode(object.value, jsonStringStyle: object.jsonStringStyle, yamlStringStyle: object.yamlStringStyle), []);',
+    );
+    buffer.writeln(
+      '    if (object is IntValue) return (IntValueNode(object.value, jsonNumberStyle: object.jsonNumberStyle, yamlNumberStyle: object.yamlNumberStyle), []);',
+    );
+    buffer.writeln(
+      '    if (object is DoubleValue) return (DoubleValueNode(object.value, jsonNumberStyle: object.jsonNumberStyle, yamlNumberStyle: object.yamlNumberStyle), []);',
+    );
+    buffer.writeln(
+      '    if (object is BoolValue) return (BoolValueNode(object.value, yamlBoolStyle: object.yamlBoolStyle), []);',
+    );
     buffer.writeln('    if (object is NullValue) return (NullValueNode(yamlNullStyle: object.yamlNullStyle), []);');
     buffer.writeln();
 
@@ -120,7 +128,7 @@ class SchemaBasedGenerator extends Generator {
 
       for (final property in schema.properties.values) {
         final nodeType = _getNodeTypeForEdge(property);
-        
+
         if (property.nullable) {
           buffer.writeln('      if (object.${property.name} != null) {');
           buffer.writeln('        edges.add((Edge($nodeType, \'${property.name}\'), object.${property.name}!));');
@@ -153,6 +161,8 @@ class SchemaBasedGenerator extends Generator {
         return 'DoubleValueNode';
       case SchemaType.boolean:
         return 'BoolValueNode';
+      case SchemaType.typeParameter:
+        return '${property.typeParameterName}Node';
       case SchemaType.object:
         return '${property.referencedSchema!.title}Node';
       case SchemaType.array:
@@ -162,4 +172,3 @@ class SchemaBasedGenerator extends Generator {
     }
   }
 }
-

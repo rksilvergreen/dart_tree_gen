@@ -6,43 +6,42 @@ import 'package:analyzer/dart/ast/ast.dart';
 import 'schema_info.dart';
 
 /// Standalone version of SchemaAnalyzer that doesn't require build_runner.
+///
+/// Analyzes @tree annotated $Tree definitions and extracts schema information.
 class StandaloneSchemaAnalyzer {
   final ResolvedLibraryResult libraryResult;
 
-  /// All discovered schemas, keyed by variable name
+  /// All discovered schemas, keyed by schema name (title)
   final Map<String, SchemaInfo> _schemas = {};
 
-  /// Schemas that were directly annotated
-  final Set<String> _annotatedSchemas = {};
-
-  /// Maps DartObject hash codes to schema names (to detect variable references)
-  final Map<int, String> _objectToSchemaName = {};
+  /// Maps DartObject identity to already-analyzed SchemaInfo
+  final Map<int, SchemaInfo> _objectToSchema = {};
 
   StandaloneSchemaAnalyzer(this.libraryResult);
 
-  /// Analyzes all @schema annotated variables in the library.
+  /// Analyzes all @tree annotated variables in the library.
   Future<Map<String, SchemaInfo>> analyze() async {
-    // Step 1: Find all variables with @schema annotation using AST
+    // Find all variables with @tree annotation using AST
     final annotatedVariableNames = <String>{};
-    
+
     for (final unitResult in libraryResult.units) {
       final unit = unitResult.unit;
-      
+
       for (final declaration in unit.declarations) {
         if (declaration is! TopLevelVariableDeclaration) continue;
-        
-        // Check for @schema annotation
-        final hasSchema = declaration.metadata.any((annotation) {
+
+        // Check for @tree annotation
+        final hasTree = declaration.metadata.any((annotation) {
           final name = annotation.name;
           if (name is SimpleIdentifier) {
-            return name.name == 'schema';
+            return name.name == 'tree';
           } else if (name is PrefixedIdentifier) {
-            return name.identifier.name == 'schema';
+            return name.identifier.name == 'tree';
           }
           return false;
         });
-        
-        if (hasSchema) {
+
+        if (hasTree) {
           // Collect variable names
           for (final variable in declaration.variables.variables) {
             annotatedVariableNames.add(variable.name.lexeme);
@@ -50,107 +49,133 @@ class StandaloneSchemaAnalyzer {
         }
       }
     }
-    
-    // Step 2: Look up elements by name and process them
-    // We need to search through the library's scope to find the variables
+
+    // Process each @tree annotated variable
     for (final variableName in annotatedVariableNames) {
       TopLevelVariableElement? element;
-      
+
       // Search through all compilation units
       for (final unitResult in libraryResult.units) {
         final unitElement = unitResult.libraryFragment;
-        
+
         // Find the variable in this unit
         for (final topLevelVariable in unitElement.topLevelVariables) {
           if (topLevelVariable.name == variableName) {
-            // In analyzer 9.x, fragments have an 'element' property to get the actual element
             element = topLevelVariable.element;
             break;
           }
         }
-        
+
         if (element != null) break;
       }
-      
+
       if (element == null) {
         throw Exception('Could not find element for variable $variableName');
       }
-      
-      _annotatedSchemas.add(variableName);
-      
+
       // Get the constant value
       final constValue = element.computeConstantValue();
       if (constValue == null) {
-        throw Exception('Variable $variableName annotated with @schema must be a const value');
+        throw Exception('Variable $variableName annotated with @tree must be a const value');
       }
-      
-      // Track the DartObject for this schema
-      _objectToSchemaName[constValue.hashCode] = variableName;
-      
-      // Analyze the schema
-      await _analyzeSchema(variableName, constValue, element, isAnnotated: true);
+
+      // Verify it's a $Tree
+      final typeName = constValue.type?.element?.name;
+      if (typeName != '\$Tree') {
+        throw Exception('@tree annotation must be on a \$Tree const, found: $typeName');
+      }
+
+      // Analyze the $Tree
+      await _analyzeTree(constValue);
     }
-    
+
     return Map.unmodifiable(_schemas);
   }
 
-  /// Analyzes a single schema constant value.
-  Future<SchemaInfo> _analyzeSchema(
-    String name,
-    DartObject value,
-    Element element, {
-    required bool isAnnotated,
-  }) async {
-    // Check if already analyzed
-    if (_schemas.containsKey(name)) {
-      return _schemas[name]!;
+  /// Analyzes a $Tree constant and extracts all schemas.
+  Future<void> _analyzeTree(DartObject treeValue) async {
+    // Extract name
+    final nameField = treeValue.getField('name');
+    final treeName = nameField?.toStringValue();
+    if (treeName == null || treeName.isEmpty) {
+      throw Exception('\$Tree must have a non-empty name parameter');
     }
 
-    final type = value.type;
-    if (type == null) {
-      throw Exception('Could not determine type of schema variable $name');
+    // Extract schemas list
+    final schemasField = treeValue.getField('schemas');
+    if (schemasField == null || schemasField.isNull) {
+      throw Exception('\$Tree must have a schemas list');
     }
 
-    final typeElement = type.element;
-    final className = typeElement?.name;
-
-    if (className == null) {
-      throw Exception('Could not determine class name for schema variable $name');
+    final schemasList = schemasField.toListValue();
+    if (schemasList == null || schemasList.isEmpty) {
+      throw Exception('\$Tree schemas list cannot be empty');
     }
 
-    // Handle $Object
-    if (className == '\$Object') {
-      return await _analyzeObject(name, value, element, isAnnotated: isAnnotated);
+    // First pass: collect all schemas by name for cross-referencing
+    for (final schemaObj in schemasList) {
+      final typeName = schemaObj.type?.element?.name;
+
+      if (typeName == '\$Schema') {
+        final nameField = schemaObj.getField('name');
+        final name = nameField?.toStringValue();
+        if (name != null && name.isNotEmpty) {
+          _objectToSchema[schemaObj.hashCode] = SchemaInfo(name: name, title: name, isAnnotated: true, properties: {});
+        }
+      } else if (typeName == '\$Union') {
+        final nameField = schemaObj.getField('name');
+        final name = nameField?.toStringValue();
+        if (name != null && name.isNotEmpty) {
+          _objectToSchema[schemaObj.hashCode] = SchemaInfo(name: name, title: name, isAnnotated: true, properties: {});
+        }
+      }
     }
 
-    // Handle $Union
-    if (className == '\$Union') {
-      return await _analyzeUnion(name, value, element, isAnnotated: isAnnotated);
+    // Second pass: fully analyze each schema
+    for (final schemaObj in schemasList) {
+      await _analyzeSchemaOrUnion(schemaObj);
     }
-
-    // If annotated but not a $Object or $Union, throw error
-    if (isAnnotated) {
-      throw Exception(
-        '@schema can only annotate variables of type \$Object or \$Union. Found: $className',
-      );
-    }
-
-    throw Exception('Unsupported schema type: $className');
   }
 
-  /// Analyzes a $Object schema.
-  Future<SchemaInfo> _analyzeObject(
-    String name,
-    DartObject value,
-    Element element, {
-    required bool isAnnotated,
-  }) async {
-    // Extract title
-    final titleField = _getFieldFromHierarchy(value, 'title');
-    final title = titleField?.toStringValue();
+  /// Analyzes a _$Schema (either $Schema or $Union).
+  Future<SchemaInfo> _analyzeSchemaOrUnion(DartObject value) async {
+    final typeName = value.type?.element?.name;
 
-    if (title == null || title.isEmpty) {
-      throw Exception('\$Object schema "$name" must have a non-empty title parameter');
+    if (typeName == '\$Schema') {
+      return await _analyzeSchema(value);
+    } else if (typeName == '\$Union') {
+      return await _analyzeUnion(value);
+    }
+
+    throw Exception('Expected \$Schema or \$Union, got: $typeName');
+  }
+
+  /// Analyzes a $Schema object.
+  Future<SchemaInfo> _analyzeSchema(DartObject value) async {
+    // Check if already fully analyzed
+    final existing = _schemas.values
+        .where((s) => _objectToSchema[value.hashCode]?.title == s.title && s.properties.isNotEmpty)
+        .firstOrNull;
+    if (existing != null) return existing;
+
+    // Extract name
+    final nameField = value.getField('name');
+    final name = nameField?.toStringValue();
+    if (name == null || name.isEmpty) {
+      throw Exception('\$Schema must have a non-empty name parameter');
+    }
+
+    // Extract type parameters
+    final typeParamsField = value.getField('typeParameters');
+    final typeParameters = <String>{};
+    if (typeParamsField != null && !typeParamsField.isNull) {
+      final paramsSet = typeParamsField.toSetValue();
+      if (paramsSet != null) {
+        for (final param in paramsSet) {
+          final paramStr = param.toStringValue();
+          if (paramStr != null) typeParameters.add(paramStr);
+        }
+      }
     }
 
     // Extract required list
@@ -208,7 +233,7 @@ class StandaloneSchemaAnalyzer {
           final propertyInfo = await _analyzeProperty(
             propertyName,
             propertyValue,
-            element,
+            typeParameters,
             isRequired: required.contains(propertyName),
           );
 
@@ -217,39 +242,48 @@ class StandaloneSchemaAnalyzer {
       }
     }
 
-    // Extract min/max properties
-    final minPropertiesField = value.getField('minProperties');
-    final maxPropertiesField = value.getField('maxProperties');
-
     final schemaInfo = SchemaInfo(
       name: name,
-      title: title,
-      isAnnotated: isAnnotated,
+      title: name,
+      isAnnotated: true,
+      typeParameters: typeParameters,
       properties: properties,
       required: required,
       allowed: allowed.isNotEmpty ? allowed : null,
       nullable: nullable.isNotEmpty ? nullable : null,
-      minProperties: minPropertiesField?.toIntValue(),
-      maxProperties: maxPropertiesField?.toIntValue(),
     );
 
     _schemas[name] = schemaInfo;
+    _objectToSchema[value.hashCode] = schemaInfo;
     return schemaInfo;
   }
 
   /// Analyzes a $Union schema.
-  Future<SchemaInfo> _analyzeUnion(
-    String name,
-    DartObject value,
-    Element element, {
-    required bool isAnnotated,
-  }) async {
-    // Extract title
-    final titleField = _getFieldFromHierarchy(value, 'title');
-    final title = titleField?.toStringValue();
+  Future<SchemaInfo> _analyzeUnion(DartObject value) async {
+    // Check if already fully analyzed
+    final existing = _schemas.values
+        .where((s) => _objectToSchema[value.hashCode]?.title == s.title && s.unionInfo != null)
+        .firstOrNull;
+    if (existing != null) return existing;
 
-    if (title == null || title.isEmpty) {
-      throw Exception('\$Union schema "$name" must have a non-empty title parameter');
+    // Extract name
+    final nameField = value.getField('name');
+    final name = nameField?.toStringValue();
+    if (name == null || name.isEmpty) {
+      throw Exception('\$Union must have a non-empty name parameter');
+    }
+
+    // Extract type parameters (now a Set<String>)
+    final typeParamsField = value.getField('typeParameters');
+    final typeParameters = <String>{};
+    if (typeParamsField != null && !typeParamsField.isNull) {
+      final paramsSet = typeParamsField.toSetValue();
+      if (paramsSet != null) {
+        for (final param in paramsSet) {
+          final paramStr = param.toStringValue();
+          if (paramStr != null) typeParameters.add(paramStr);
+        }
+      }
     }
 
     // Extract types set
@@ -262,92 +296,44 @@ class StandaloneSchemaAnalyzer {
         for (final typeObj in typesSet) {
           final typeName = typeObj.type?.element?.name;
 
-          // Analyze each type in the union
-          if (typeName == '\$String') {
-            // Create a schema info for string type
-            unionTypes.add(SchemaInfo(
-              name: '_String',
-              title: 'String',
-              isAnnotated: false,
-              properties: {},
-            ));
-          } else if (typeName == '\$Integer') {
-            unionTypes.add(SchemaInfo(
-              name: '_Integer',
-              title: 'Integer',
-              isAnnotated: false,
-              properties: {},
-            ));
-          } else if (typeName == '\$Number' || typeName == '\$Double') {
-            unionTypes.add(SchemaInfo(
-              name: '_Number',
-              title: 'Number',
-              isAnnotated: false,
-              properties: {},
-            ));
-          } else if (typeName == '\$Boolean') {
-            unionTypes.add(SchemaInfo(
-              name: '_Boolean',
-              title: 'Boolean',
-              isAnnotated: false,
-              properties: {},
-            ));
-          } else if (typeName == '\$Object') {
-            // Check if this is a reference to an existing schema
-            final existingSchemaName = _objectToSchemaName[typeObj.hashCode];
-            if (existingSchemaName != null) {
-              final existing = _schemas[existingSchemaName];
-              if (existing != null) {
-                unionTypes.add(existing);
-              }
-            } else {
-              // Inline object in union
-              final inlineName = '_Inline${title}Type${unionTypes.length + 1}';
-              final inlineSchema = await _analyzeObject(inlineName, typeObj, element, isAnnotated: false);
-              unionTypes.add(inlineSchema);
+          if (typeName == '\$Object') {
+            // Get the referenced schema
+            final schemaRef = typeObj.getField('schema');
+            if (schemaRef != null && !schemaRef.isNull) {
+              final refSchema = await _analyzeSchemaOrUnion(schemaRef);
+              unionTypes.add(refSchema);
             }
-          }
-        }
-      }
-    }
-
-    // Extract type parameters
-    final typeParamsField = value.getField('typeParameters');
-    final typeParameters = <String, String>{};
-    
-    if (typeParamsField != null && !typeParamsField.isNull) {
-      final paramsMap = typeParamsField.toMapValue();
-      if (paramsMap != null) {
-        for (final entry in paramsMap.entries) {
-          final key = entry.key?.toStringValue();
-          final value = entry.value?.toStringValue();
-          if (key != null && value != null) {
-            typeParameters[key] = value;
+          } else if (typeName == '\$String') {
+            unionTypes.add(SchemaInfo(name: '_String', title: 'String', isAnnotated: false, properties: {}));
+          } else if (typeName == '\$Integer') {
+            unionTypes.add(SchemaInfo(name: '_Integer', title: 'Integer', isAnnotated: false, properties: {}));
+          } else if (typeName == '\$Double') {
+            unionTypes.add(SchemaInfo(name: '_Number', title: 'Number', isAnnotated: false, properties: {}));
+          } else if (typeName == '\$Boolean') {
+            unionTypes.add(SchemaInfo(name: '_Boolean', title: 'Boolean', isAnnotated: false, properties: {}));
           }
         }
       }
     }
 
     final totalTypes = unionTypes.length + typeParameters.length;
-    if (totalTypes < 2 || totalTypes > 4) {
-      throw Exception('\$Union "$name" must have between 2 and 4 total types (concrete + type parameters), got $totalTypes');
+    if (totalTypes < 2) {
+      throw Exception('\$Union "$name" must have at least 2 total types (concrete + type parameters), got $totalTypes');
     }
 
-    final unionInfo = UnionInfo(
-      title: title,
-      types: unionTypes,
-      typeParameters: typeParameters,
-    );
+    final unionInfo = UnionInfo(title: name, types: unionTypes, typeParameters: typeParameters);
 
     final schemaInfo = SchemaInfo(
       name: name,
-      title: title,
-      isAnnotated: isAnnotated,
+      title: name,
+      isAnnotated: true,
+      typeParameters: typeParameters,
       properties: {},
       unionInfo: unionInfo,
     );
 
     _schemas[name] = schemaInfo;
+    _objectToSchema[value.hashCode] = schemaInfo;
     return schemaInfo;
   }
 
@@ -355,164 +341,143 @@ class StandaloneSchemaAnalyzer {
   Future<PropertyInfo> _analyzeProperty(
     String propertyName,
     DartObject value,
-    Element element, {
+    Set<String> schemaTypeParameters, {
     required bool isRequired,
   }) async {
-    final type = value.type;
-    if (type == null) {
-      throw Exception('Could not determine type of property $propertyName');
-    }
+    final typeName = value.type?.element?.name;
 
-    final className = type.element?.name;
-
-    // Determine schema type and constraints
-    SchemaType schemaType;
-    ValidationConstraints constraints;
-    SchemaInfo? referencedSchema;
-
-    switch (className) {
+    switch (typeName) {
       case '\$String':
-        schemaType = SchemaType.string;
-        constraints = _extractStringConstraints(value);
-        break;
+        return PropertyInfo(name: propertyName, type: SchemaType.string, nullable: !isRequired);
 
       case '\$Integer':
-        schemaType = SchemaType.integer;
-        constraints = _extractNumberConstraints(value);
-        break;
+        return PropertyInfo(name: propertyName, type: SchemaType.integer, nullable: !isRequired);
 
-      case '\$Number':
-        schemaType = SchemaType.number;
-        constraints = _extractNumberConstraints(value);
-        break;
+      case '\$Double':
+        return PropertyInfo(name: propertyName, type: SchemaType.number, nullable: !isRequired);
 
       case '\$Boolean':
-        schemaType = SchemaType.boolean;
-        constraints = const ValidationConstraints();
-        break;
+        return PropertyInfo(name: propertyName, type: SchemaType.boolean, nullable: !isRequired);
+
+      case '\$TypeParameter':
+        final paramNameField = value.getField('name');
+        final paramName = paramNameField?.toStringValue();
+
+        if (paramName == null) {
+          throw Exception('$TypeParameter must have a name');
+        }
+
+        // Validate that this type parameter is defined in the schema
+        if (!schemaTypeParameters.contains(paramName)) {
+          throw Exception(
+            'Property "$propertyName" references type parameter "$paramName" '
+            'which is not defined in the schema. Available type parameters: $schemaTypeParameters',
+          );
+        }
+
+        return PropertyInfo(
+          name: propertyName,
+          type: SchemaType.typeParameter,
+          nullable: !isRequired,
+          typeParameterName: paramName,
+        );
 
       case '\$Array':
-        schemaType = SchemaType.array;
-        constraints = _extractArrayConstraints(value);
+        final uniqueItemsField = value.getField('uniqueItems');
+        final uniqueItems = uniqueItemsField?.toBoolValue() ?? false;
 
-        // Get the items schema
+        SchemaInfo? itemSchema;
         final itemsField = value.getField('items');
         if (itemsField != null && !itemsField.isNull) {
-          final itemsType = itemsField.type?.element?.name;
-          if (itemsType == '\$Object') {
-            // Check if this is a reference to an existing schema variable
-            final existingSchemaName = _objectToSchemaName[itemsField.hashCode];
-            if (existingSchemaName != null) {
-              referencedSchema = _schemas[existingSchemaName];
-            } else {
-              // Inline object in array
-              final inlineName = '_Inline${propertyName._capitalize()}Item';
-              referencedSchema = await _analyzeObject(inlineName, itemsField, element, isAnnotated: false);
+          final itemsTypeName = itemsField.type?.element?.name;
+          if (itemsTypeName == '\$Object') {
+            // Get the referenced schema
+            final schemaRef = itemsField.getField('schema');
+            if (schemaRef != null && !schemaRef.isNull) {
+              itemSchema = await _analyzeSchemaOrUnion(schemaRef);
             }
           }
         }
-        break;
+
+        return PropertyInfo(
+          name: propertyName,
+          type: SchemaType.array,
+          nullable: !isRequired,
+          referencedSchema: itemSchema,
+          uniqueItems: uniqueItems,
+        );
 
       case '\$Object':
-        schemaType = SchemaType.object;
-        constraints = const ValidationConstraints();
-
-        // Check if this is a reference to an existing schema variable
-        final existingSchemaName = _objectToSchemaName[value.hashCode];
-        if (existingSchemaName != null) {
-          // This is a reference to an existing schema
-          referencedSchema = _schemas[existingSchemaName];
-          if (referencedSchema == null) {
-            throw Exception('Referenced schema $existingSchemaName not found for property $propertyName');
-          }
-        } else {
-          // This is an inline $Object - need to generate it
-          final inlineName = '_Inline${propertyName._capitalize()}';
-          referencedSchema = await _analyzeObject(inlineName, value, element, isAnnotated: false);
+        // Get the referenced schema
+        final schemaRef = value.getField('schema');
+        if (schemaRef == null || schemaRef.isNull) {
+          throw Exception('\$Object property "$propertyName" must reference a schema');
         }
-        break;
+
+        final refSchema = await _analyzeSchemaOrUnion(schemaRef);
+
+        // Extract and validate type parameters
+        final typeArgsField = value.getField('typeParameters');
+        Map<String, PropertyInfo>? typeArguments;
+
+        if (typeArgsField != null && !typeArgsField.isNull) {
+          final argsMap = typeArgsField.toMapValue();
+          if (argsMap != null && argsMap.isNotEmpty) {
+            typeArguments = {};
+            for (final entry in argsMap.entries) {
+              final key = entry.key?.toStringValue();
+              final argValue = entry.value;
+
+              if (key == null || argValue == null) continue;
+
+              // Validate this type param exists in the referenced schema
+              if (!refSchema.typeParameters.contains(key)) {
+                throw Exception(
+                  'Property "$propertyName" provides type argument "$key" '
+                  'but schema "${refSchema.title}" does not define this type parameter. '
+                  'Available type parameters: ${refSchema.typeParameters}',
+                );
+              }
+
+              // Analyze the type argument
+              final argInfo = await _analyzeProperty('_typeArg_$key', argValue, schemaTypeParameters, isRequired: true);
+              typeArguments[key] = argInfo;
+            }
+          }
+        }
+
+        // Validate all required type parameters are provided
+        for (final requiredParam in refSchema.typeParameters) {
+          if (typeArguments == null || !typeArguments.containsKey(requiredParam)) {
+            throw Exception(
+              'Property "$propertyName" references schema "${refSchema.title}" '
+              'but does not provide required type parameter "$requiredParam". '
+              'Required type parameters: ${refSchema.typeParameters}',
+            );
+          }
+        }
+
+        return PropertyInfo(
+          name: propertyName,
+          type: SchemaType.object,
+          nullable: !isRequired,
+          referencedSchema: refSchema,
+          typeArguments: typeArguments,
+        );
 
       case '\$Union':
-        schemaType = SchemaType.union;
-        constraints = const ValidationConstraints();
-
-        // Analyze the union inline
-        final inlineName = '_Inline${propertyName._capitalize()}Union';
-        final unionSchema = await _analyzeUnion(inlineName, value, element, isAnnotated: false);
-        referencedSchema = unionSchema;
-        break;
+        // Inline union
+        final unionSchema = await _analyzeUnion(value);
+        return PropertyInfo(
+          name: propertyName,
+          type: SchemaType.union,
+          nullable: !isRequired,
+          referencedSchema: unionSchema,
+          unionInfo: unionSchema.unionInfo,
+        );
 
       default:
-        throw Exception('Unsupported property type: $className for property $propertyName');
+        throw Exception('Unsupported property type: $typeName for property $propertyName');
     }
-
-    return PropertyInfo(
-      name: propertyName,
-      type: schemaType,
-      nullable: !isRequired,
-      referencedSchema: referencedSchema,
-      constraints: constraints,
-    );
-  }
-
-  /// Extracts string validation constraints.
-  ValidationConstraints _extractStringConstraints(DartObject value) {
-    return ValidationConstraints(
-      pattern: value.getField('pattern')?.toStringValue(),
-      minLength: value.getField('minLength')?.toIntValue(),
-      maxLength: value.getField('maxLength')?.toIntValue(),
-      format: value.getField('format')?.toStringValue(),
-    );
-  }
-
-  /// Extracts number validation constraints.
-  ValidationConstraints _extractNumberConstraints(DartObject value) {
-    return ValidationConstraints(
-      minimum: value.getField('minimum')?.toDoubleValue() ?? value.getField('minimum')?.toIntValue()?.toDouble(),
-      exclusiveMinimum:
-          value.getField('exclusiveMinimum')?.toDoubleValue() ??
-          value.getField('exclusiveMinimum')?.toIntValue()?.toDouble(),
-      maximum: value.getField('maximum')?.toDoubleValue() ?? value.getField('maximum')?.toIntValue()?.toDouble(),
-      exclusiveMaximum:
-          value.getField('exclusiveMaximum')?.toDoubleValue() ??
-          value.getField('exclusiveMaximum')?.toIntValue()?.toDouble(),
-      multipleOf:
-          value.getField('multipleOf')?.toDoubleValue() ?? value.getField('multipleOf')?.toIntValue()?.toDouble(),
-    );
-  }
-
-  /// Extracts array validation constraints.
-  ValidationConstraints _extractArrayConstraints(DartObject value) {
-    return ValidationConstraints(
-      minItems: value.getField('minItems')?.toIntValue(),
-      maxItems: value.getField('maxItems')?.toIntValue(),
-      uniqueItems: value.getField('uniqueItems')?.toBoolValue(),
-    );
-  }
-
-  /// Helper method to get a field from a DartObject, checking parent classes if needed.
-  DartObject? _getFieldFromHierarchy(DartObject object, String fieldName) {
-    // First try to get the field directly
-    final field = object.getField(fieldName);
-    if (field != null) return field;
-
-    // If not found, try to get it from the superclass
-    var superObject = object.getField('(super)');
-    while (superObject != null && !superObject.isNull) {
-      final field = superObject.getField(fieldName);
-      if (field != null) return field;
-      superObject = superObject.getField('(super)');
-    }
-
-    return null;
   }
 }
-
-/// Extension to capitalize strings.
-extension on String {
-  String _capitalize() {
-    if (isEmpty) return this;
-    return this[0].toUpperCase() + substring(1);
-  }
-}
-

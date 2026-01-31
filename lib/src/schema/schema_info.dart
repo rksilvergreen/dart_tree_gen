@@ -6,11 +6,14 @@ class SchemaInfo {
   /// Variable name (e.g., 'blogPost') or generated name for inline schemas
   final String name;
 
-  /// Class name from title property (e.g., 'BlogPost')
+  /// Class name from name property (e.g., 'BlogPost')
   final String title;
 
-  /// Whether this schema was directly annotated with @schema
+  /// Whether this schema was directly annotated with @tree
   final bool isAnnotated;
+
+  /// Type parameters defined in this schema (e.g., {'T', 'U'})
+  final Set<String> typeParameters;
 
   /// Properties defined in this schema
   final Map<String, PropertyInfo> properties;
@@ -24,12 +27,6 @@ class SchemaInfo {
   /// List of nullable property names
   final List<String>? nullable;
 
-  /// Minimum number of properties (for validation)
-  final int? minProperties;
-
-  /// Maximum number of properties (for validation)
-  final int? maxProperties;
-
   /// Union information if this schema is a union type
   final UnionInfo? unionInfo;
 
@@ -38,11 +35,10 @@ class SchemaInfo {
     required this.title,
     required this.isAnnotated,
     required this.properties,
+    this.typeParameters = const {},
     this.required = const [],
     this.allowed,
     this.nullable,
-    this.minProperties,
-    this.maxProperties,
     this.unionInfo,
   });
 
@@ -50,7 +46,7 @@ class SchemaInfo {
   bool isPropertyRequired(String propertyName) {
     return required.contains(propertyName);
   }
-  
+
   /// Whether this schema represents a union type
   bool get isUnion => unionInfo != null;
 }
@@ -72,8 +68,14 @@ class PropertyInfo {
   /// Union information for union types
   final UnionInfo? unionInfo;
 
-  /// Validation constraints
-  final ValidationConstraints constraints;
+  /// Type parameter name if this property uses a $TypeParameter
+  final String? typeParameterName;
+
+  /// Type arguments for $Object references (maps schema type param -> actual type)
+  final Map<String, PropertyInfo>? typeArguments;
+
+  /// Whether array items should be unique (generates Set instead of List)
+  final bool uniqueItems;
 
   const PropertyInfo({
     required this.name,
@@ -81,7 +83,9 @@ class PropertyInfo {
     required this.nullable,
     this.referencedSchema,
     this.unionInfo,
-    required this.constraints,
+    this.typeParameterName,
+    this.typeArguments,
+    this.uniqueItems = false,
   });
 }
 
@@ -94,57 +98,9 @@ enum SchemaType {
   object,
   array,
   union,
-}
 
-/// Validation constraints for a property.
-class ValidationConstraints {
-  // String constraints
-  final String? pattern;
-  final int? minLength;
-  final int? maxLength;
-  final String? format;
-
-  // Number constraints
-  final num? minimum;
-  final num? exclusiveMinimum;
-  final num? maximum;
-  final num? exclusiveMaximum;
-  final num? multipleOf;
-
-  // Array constraints
-  final int? minItems;
-  final int? maxItems;
-  final bool? uniqueItems;
-
-  const ValidationConstraints({
-    this.pattern,
-    this.minLength,
-    this.maxLength,
-    this.format,
-    this.minimum,
-    this.exclusiveMinimum,
-    this.maximum,
-    this.exclusiveMaximum,
-    this.multipleOf,
-    this.minItems,
-    this.maxItems,
-    this.uniqueItems,
-  });
-
-  /// Whether this constraint set has any validation rules
-  bool get hasConstraints =>
-      pattern != null ||
-      minLength != null ||
-      maxLength != null ||
-      format != null ||
-      minimum != null ||
-      exclusiveMinimum != null ||
-      maximum != null ||
-      exclusiveMaximum != null ||
-      multipleOf != null ||
-      minItems != null ||
-      maxItems != null ||
-      uniqueItems != null;
+  /// Represents a type parameter reference (e.g., $TypeParameter('T'))
+  typeParameter,
 }
 
 /// Information about a union type.
@@ -152,17 +108,12 @@ class UnionInfo {
   /// Union title/name
   final String title;
 
-  /// Schemas that make up this union
+  /// Schemas that make up this union (concrete types)
   final List<SchemaInfo> types;
 
-  /// Type parameters map: type parameter name -> constructor name
-  /// e.g., {'T': 'value', 'U': 'car'}
-  final Map<String, String> typeParameters;
-  
-  const UnionInfo({
-    required this.title,
-    required this.types,
-    this.typeParameters = const {},
-  });
-}
+  /// Type parameters defined in this union (e.g., {'T', 'U'})
+  /// The constructor name for each is derived from lowercase first letter
+  final Set<String> typeParameters;
 
+  const UnionInfo({required this.title, required this.types, this.typeParameters = const {}});
+}

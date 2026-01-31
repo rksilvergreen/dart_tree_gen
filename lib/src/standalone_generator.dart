@@ -18,11 +18,7 @@ class GenerationResult {
   final int schemasProcessed;
   final List<String> errors;
 
-  GenerationResult({
-    required this.filesGenerated,
-    required this.schemasProcessed,
-    required this.errors,
-  });
+  GenerationResult({required this.filesGenerated, required this.schemasProcessed, required this.errors});
 }
 
 /// Standalone generator that runs outside build_runner.
@@ -38,23 +34,17 @@ class StandaloneGenerator {
     final errors = <String>[];
 
     try {
-      // Find all .dart files with @schema annotations
+      // Find all .dart files with @tree annotations
       final schemaFiles = await _findSchemaFiles();
 
       if (schemaFiles.isEmpty) {
         print('No schema files found.');
-        return GenerationResult(
-          filesGenerated: 0,
-          schemasProcessed: 0,
-          errors: [],
-        );
+        return GenerationResult(filesGenerated: 0, schemasProcessed: 0, errors: []);
       }
 
       // Create analysis context
       final absolutePath = p.normalize(p.absolute(directory.path));
-      final collection = AnalysisContextCollection(
-        includedPaths: [absolutePath],
-      );
+      final collection = AnalysisContextCollection(includedPaths: [absolutePath]);
 
       // Process each file
       for (final file in schemaFiles) {
@@ -90,11 +80,7 @@ class StandaloneGenerator {
       errors.add('Fatal error: $e\n$stack');
     }
 
-    return GenerationResult(
-      filesGenerated: filesGenerated,
-      schemasProcessed: schemasProcessed,
-      errors: errors,
-    );
+    return GenerationResult(filesGenerated: filesGenerated, schemasProcessed: schemasProcessed, errors: errors);
   }
 
   /// Clean generated files.
@@ -132,7 +118,7 @@ class StandaloneGenerator {
     // TODO: Implement file watching
   }
 
-  /// Find all .dart files that might contain @schema annotations.
+  /// Find all .dart files that might contain @tree annotations.
   Future<List<File>> _findSchemaFiles() async {
     final dartFiles = <File>[];
 
@@ -147,9 +133,9 @@ class StandaloneGenerator {
           continue;
         }
 
-        // Quick check if file contains @schema
+        // Quick check if file contains @tree
         final content = await entity.readAsString();
-        if (content.contains('@schema')) {
+        if (content.contains('@tree')) {
           dartFiles.add(entity);
         }
       }
@@ -159,10 +145,7 @@ class StandaloneGenerator {
   }
 
   /// Generate files for a single schema file.
-  Future<_FileGenerationResult> _generateForFile(
-    File file,
-    AnalysisContextCollection collection,
-  ) async {
+  Future<_FileGenerationResult> _generateForFile(File file, AnalysisContextCollection collection) async {
     try {
       // Get the analysis context for this file
       final absolutePath = p.normalize(p.absolute(file.path));
@@ -207,10 +190,7 @@ class StandaloneGenerator {
   }
 
   /// Generate all output files for a schema file.
-  Future<_FileGenerationResult> _generateFiles(
-    File sourceFile,
-    List<SchemaInfo> schemas,
-  ) async {
+  Future<_FileGenerationResult> _generateFiles(File sourceFile, List<SchemaInfo> schemas) async {
     final inputPath = sourceFile.path;
     final inputBaseName = p.basenameWithoutExtension(inputPath);
     final inputDir = sourceFile.parent.path;
@@ -228,11 +208,7 @@ class StandaloneGenerator {
       final objectFileName = _toSnakeCase(schema.title) + '_object.dart';
       final objectPath = p.join(outputBaseDir, 'objects', objectFileName);
 
-      final objectGenerator = StandaloneTreeObjectGenerator(
-        schema,
-        schemas,
-        inputBaseName,
-      );
+      final objectGenerator = StandaloneTreeObjectGenerator(schema, schemas, inputBaseName);
       final objectCode = objectGenerator.generate();
 
       await File(objectPath).writeAsString(objectCode);
@@ -244,11 +220,7 @@ class StandaloneGenerator {
       final nodeFileName = _toSnakeCase(schema.title) + '_node.dart';
       final nodePath = p.join(outputBaseDir, 'nodes', nodeFileName);
 
-      final nodeGenerator = StandaloneTreeNodeGenerator(
-        schema,
-        schemas,
-        inputBaseName,
-      );
+      final nodeGenerator = StandaloneTreeNodeGenerator(schema, schemas, inputBaseName);
       final nodeCode = nodeGenerator.generate();
 
       await File(nodePath).writeAsString(nodeCode);
@@ -259,10 +231,7 @@ class StandaloneGenerator {
     final treeFileName = '${inputBaseName}_tree.dart';
     final treePath = p.join(outputBaseDir, 'trees', treeFileName);
 
-    final treeGenerator = StandaloneTreeGenerator(
-      schemas,
-      inputBaseName,
-    );
+    final treeGenerator = StandaloneTreeGenerator(schemas, inputBaseName);
     final treeCode = treeGenerator.generate();
 
     await File(treePath).writeAsString(treeCode);
@@ -272,10 +241,7 @@ class StandaloneGenerator {
     final deserializersFileName = '${inputBaseName}_deserializers.dart';
     final deserializersPath = p.join(outputBaseDir, deserializersFileName);
 
-    final deserializersGenerator = DeserializersGenerator(
-      schemas: schemas,
-      sourceFileName: '$inputBaseName.dart',
-    );
+    final deserializersGenerator = DeserializersGenerator(schemas: schemas, sourceFileName: '$inputBaseName.dart');
     final deserializersCode = deserializersGenerator.generate();
 
     await File(deserializersPath).writeAsString(deserializersCode);
@@ -285,26 +251,18 @@ class StandaloneGenerator {
     final barrelFileName = '$inputBaseName.generated.dart';
     final barrelPath = p.join(inputDir, barrelFileName);
 
-    final barrelGenerator = BarrelFileGenerator(
-      schemas,
-      inputBaseName,
-      [],
-    );
+    final barrelGenerator = BarrelFileGenerator(schemas, inputBaseName, []);
     final barrelCode = barrelGenerator.generate();
 
     await File(barrelPath).writeAsString(barrelCode);
     filesGenerated++;
 
-    return _FileGenerationResult(
-      filesGenerated: filesGenerated,
-      schemasCount: schemas.length,
-    );
+    return _FileGenerationResult(filesGenerated: filesGenerated, schemasCount: schemas.length);
   }
 
   String _toSnakeCase(String input) {
     return input
-        .replaceAllMapped(
-            RegExp(r'[A-Z]'), (match) => '_${match.group(0)!.toLowerCase()}')
+        .replaceAllMapped(RegExp(r'[A-Z]'), (match) => '_${match.group(0)!.toLowerCase()}')
         .replaceFirst(RegExp(r'^_'), '');
   }
 
@@ -318,9 +276,5 @@ class _FileGenerationResult {
   final int filesGenerated;
   final int schemasCount;
 
-  _FileGenerationResult({
-    required this.filesGenerated,
-    required this.schemasCount,
-  });
+  _FileGenerationResult({required this.filesGenerated, required this.schemasCount});
 }
-

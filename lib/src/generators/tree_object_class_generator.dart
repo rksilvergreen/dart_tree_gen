@@ -1,5 +1,4 @@
 import '../schema/schema_info.dart';
-import '../validation/validation_code_generator.dart';
 
 /// Extension to capitalize strings.
 extension StringExtensions on String {
@@ -12,10 +11,8 @@ extension StringExtensions on String {
 /// Generates TreeObject class code from a SchemaInfo.
 class TreeObjectClassGenerator {
   final SchemaInfo schema;
-  final ValidationCodeGenerator validationGenerator;
 
-  TreeObjectClassGenerator(this.schema)
-      : validationGenerator = ValidationCodeGenerator();
+  TreeObjectClassGenerator(this.schema);
 
   /// Gets the proper way to access a property in code expressions.
   /// Always use 'this.' prefix to avoid conflicts with local variables.
@@ -69,44 +66,48 @@ class TreeObjectClassGenerator {
     return buffer.toString();
   }
 
+  /// Gets a field name from a type parameter name (lowercase first letter).
+  String _typeParamToFieldName(String typeParam) {
+    return typeParam[0].toLowerCase() + typeParam.substring(1);
+  }
+
   /// Generates a concrete union class.
   String _generateUnion() {
     final unionInfo = schema.unionInfo!;
     final types = unionInfo.types;
     final typeParams = unionInfo.typeParameters;
     final totalTypes = types.length + typeParams.length;
-    
-    if (totalTypes < 2 || totalTypes > 4) {
-      throw Exception('Union must have 2-4 total types, got $totalTypes');
+
+    if (totalTypes < 2) {
+      throw Exception('Union must have at least 2 total types, got $totalTypes');
     }
-    
+
     final buffer = StringBuffer();
-    
+
     // Class declaration with type parameters
     buffer.writeln('/// Generated union class for ${schema.title}');
     buffer.write('class ${schema.title}Object');
     if (typeParams.isNotEmpty) {
       buffer.write('<');
-      buffer.write(typeParams.keys.map((t) => '$t extends TreeObject').join(', '));
+      buffer.write(typeParams.map((t) => '$t extends TreeObject').join(', '));
       buffer.write('>');
     }
     buffer.writeln(' extends TreeObject {');
-    
+
     // Generate nullable fields for concrete types
     for (final type in types) {
       final constructorName = _getConstructorName(type);
       final dartType = _getUnionDartType(type);
       buffer.writeln('  final $dartType? _$constructorName;');
     }
-    
+
     // Generate nullable fields for type parameters
-    for (final entry in typeParams.entries) {
-      final typeParam = entry.key;
-      final fieldName = entry.value;
+    for (final typeParam in typeParams) {
+      final fieldName = _typeParamToFieldName(typeParam);
       buffer.writeln('  final $typeParam? _$fieldName;');
     }
     buffer.writeln();
-    
+
     // Generate named constructors for concrete types
     for (final type in types) {
       final constructorName = _getConstructorName(type);
@@ -114,7 +115,7 @@ class TreeObjectClassGenerator {
       buffer.writeln('  /// Creates a ${schema.title} with a $dartType value.');
       buffer.write('  ${schema.title}Object.$constructorName($dartType $constructorName)');
       buffer.write(' : _$constructorName = $constructorName');
-      
+
       // Set other concrete type fields to null
       for (final otherType in types) {
         final otherName = _getConstructorName(otherType);
@@ -122,31 +123,32 @@ class TreeObjectClassGenerator {
           buffer.write(', _$otherName = null');
         }
       }
-      
+
       // Set type parameter fields to null
-      for (final fieldName in typeParams.values) {
+      for (final typeParam in typeParams) {
+        final fieldName = _typeParamToFieldName(typeParam);
         buffer.write(', _$fieldName = null');
       }
       buffer.writeln(';');
       buffer.writeln();
     }
-    
+
     // Generate named constructors for type parameters
-    for (final entry in typeParams.entries) {
-      final typeParam = entry.key;
-      final fieldName = entry.value;
+    for (final typeParam in typeParams) {
+      final fieldName = _typeParamToFieldName(typeParam);
       buffer.writeln('  /// Creates a ${schema.title} with a $typeParam value.');
       buffer.write('  ${schema.title}Object.$fieldName($typeParam $fieldName)');
       buffer.write(' : _$fieldName = $fieldName');
-      
+
       // Set concrete type fields to null
       for (final type in types) {
         final constructorName = _getConstructorName(type);
         buffer.write(', _$constructorName = null');
       }
-      
+
       // Set other type parameter fields to null
-      for (final otherFieldName in typeParams.values) {
+      for (final otherTypeParam in typeParams) {
+        final otherFieldName = _typeParamToFieldName(otherTypeParam);
         if (otherFieldName != fieldName) {
           buffer.write(', _$otherFieldName = null');
         }
@@ -154,7 +156,7 @@ class TreeObjectClassGenerator {
       buffer.writeln(';');
       buffer.writeln();
     }
-    
+
     // Generate type checking getters for concrete types
     for (final type in types) {
       final constructorName = _getConstructorName(type);
@@ -164,16 +166,16 @@ class TreeObjectClassGenerator {
       buffer.writeln('  bool get is$capitalizedName => _$constructorName != null;');
       buffer.writeln();
     }
-    
+
     // Generate type checking getters for type parameters
-    for (final entry in typeParams.entries) {
-      final fieldName = entry.value;
+    for (final typeParam in typeParams) {
+      final fieldName = _typeParamToFieldName(typeParam);
       final capitalizedName = fieldName[0].toUpperCase() + fieldName.substring(1);
-      buffer.writeln('  /// Returns true if this union contains a ${entry.key}.');
+      buffer.writeln('  /// Returns true if this union contains a $typeParam.');
       buffer.writeln('  bool get is$capitalizedName => _$fieldName != null;');
       buffer.writeln();
     }
-    
+
     // Generate type casting getters for concrete types
     for (final type in types) {
       final constructorName = _getConstructorName(type);
@@ -183,17 +185,16 @@ class TreeObjectClassGenerator {
       buffer.writeln('  $dartType? get as$capitalizedName => _$constructorName;');
       buffer.writeln();
     }
-    
+
     // Generate type casting getters for type parameters
-    for (final entry in typeParams.entries) {
-      final typeParam = entry.key;
-      final fieldName = entry.value;
+    for (final typeParam in typeParams) {
+      final fieldName = _typeParamToFieldName(typeParam);
       final capitalizedName = fieldName[0].toUpperCase() + fieldName.substring(1);
       buffer.writeln('  /// Gets the value as $typeParam, or null if it\'s not that type.');
       buffer.writeln('  $typeParam? get as$capitalizedName => _$fieldName;');
       buffer.writeln();
     }
-    
+
     // Generate toJson
     buffer.writeln('  @override');
     buffer.writeln('  String toJson() {');
@@ -201,13 +202,14 @@ class TreeObjectClassGenerator {
       final constructorName = _getConstructorName(type);
       buffer.writeln('    if (_$constructorName != null) return _$constructorName.toJson();');
     }
-    for (final fieldName in typeParams.values) {
+    for (final typeParam in typeParams) {
+      final fieldName = _typeParamToFieldName(typeParam);
       buffer.writeln('    if (_$fieldName != null) return _$fieldName.toJson();');
     }
     buffer.writeln('    throw StateError(\'Union has no value set\');');
     buffer.writeln('  }');
     buffer.writeln();
-    
+
     // Generate toYaml
     buffer.writeln('  @override');
     buffer.writeln('  String toYaml() {');
@@ -215,52 +217,52 @@ class TreeObjectClassGenerator {
       final constructorName = _getConstructorName(type);
       buffer.writeln('    if (_$constructorName != null) return _$constructorName.toYaml();');
     }
-    for (final fieldName in typeParams.values) {
+    for (final typeParam in typeParams) {
+      final fieldName = _typeParamToFieldName(typeParam);
       buffer.writeln('    if (_$fieldName != null) return _$fieldName.toYaml();');
     }
     buffer.writeln('    throw StateError(\'Union has no value set\');');
     buffer.writeln('  }');
     buffer.writeln();
-    
+
     // Generate fromJson
     buffer.writeln('  /// Attempts to decode from JSON by trying each type in order.');
     buffer.write('  static ${schema.title}Object');
     if (typeParams.isNotEmpty) {
       buffer.write('<');
-      buffer.write(typeParams.keys.join(', '));
+      buffer.write(typeParams.join(', '));
       buffer.write('>');
     }
     buffer.write(' fromJson');
     if (typeParams.isNotEmpty) {
       buffer.write('<');
-      buffer.write(typeParams.keys.map((t) => '$t extends TreeObject').join(', '));
+      buffer.write(typeParams.map((t) => '$t extends TreeObject').join(', '));
       buffer.write('>');
     }
     buffer.writeln('(String json) {');
-    
+
     int attemptIndex = 0;
     // Try concrete types
     for (final type in types) {
       final constructorName = _getConstructorName(type);
       final dartType = _getUnionDartType(type);
-      
+
       if (attemptIndex > 0) buffer.writeln('    } catch (_) {');
       buffer.writeln('    try {');
       buffer.writeln('      return ${schema.title}Object.$constructorName($dartType.fromJson(json));');
       attemptIndex++;
     }
-    
+
     // Try type parameters
-    for (final entry in typeParams.entries) {
-      final typeParam = entry.key;
-      final fieldName = entry.value;
-      
+    for (final typeParam in typeParams) {
+      final fieldName = _typeParamToFieldName(typeParam);
+
       if (attemptIndex > 0) buffer.writeln('    } catch (_) {');
       buffer.writeln('    try {');
       buffer.writeln('      return ${schema.title}Object.$fieldName(deserializers.fromJson<$typeParam>(json));');
       attemptIndex++;
     }
-    
+
     buffer.writeln('    } catch (e) {');
     buffer.writeln('      throw FormatException(\'Could not decode ${schema.title}Object from JSON: \$e\');');
     buffer.writeln('    }');
@@ -269,46 +271,45 @@ class TreeObjectClassGenerator {
     }
     buffer.writeln('  }');
     buffer.writeln();
-    
+
     // Generate fromYaml
     buffer.writeln('  /// Attempts to decode from YAML by trying each type in order.');
     buffer.write('  static ${schema.title}Object');
     if (typeParams.isNotEmpty) {
       buffer.write('<');
-      buffer.write(typeParams.keys.join(', '));
+      buffer.write(typeParams.join(', '));
       buffer.write('>');
     }
     buffer.write(' fromYaml');
     if (typeParams.isNotEmpty) {
       buffer.write('<');
-      buffer.write(typeParams.keys.map((t) => '$t extends TreeObject').join(', '));
+      buffer.write(typeParams.map((t) => '$t extends TreeObject').join(', '));
       buffer.write('>');
     }
     buffer.writeln('(String yaml) {');
-    
+
     attemptIndex = 0;
     // Try concrete types
     for (final type in types) {
       final constructorName = _getConstructorName(type);
       final dartType = _getUnionDartType(type);
-      
+
       if (attemptIndex > 0) buffer.writeln('    } catch (_) {');
       buffer.writeln('    try {');
       buffer.writeln('      return ${schema.title}Object.$constructorName($dartType.fromYaml(yaml));');
       attemptIndex++;
     }
-    
+
     // Try type parameters
-    for (final entry in typeParams.entries) {
-      final typeParam = entry.key;
-      final fieldName = entry.value;
-      
+    for (final typeParam in typeParams) {
+      final fieldName = _typeParamToFieldName(typeParam);
+
       if (attemptIndex > 0) buffer.writeln('    } catch (_) {');
       buffer.writeln('    try {');
       buffer.writeln('      return ${schema.title}Object.$fieldName(deserializers.fromYaml<$typeParam>(yaml));');
       attemptIndex++;
     }
-    
+
     buffer.writeln('    } catch (e) {');
     buffer.writeln('      throw FormatException(\'Could not decode ${schema.title}Object from YAML: \$e\');');
     buffer.writeln('    }');
@@ -317,7 +318,7 @@ class TreeObjectClassGenerator {
     }
     buffer.writeln('  }');
     buffer.writeln();
-    
+
     // Generate toString
     buffer.writeln('  @override');
     buffer.write('  String toString() => \'${schema.title}Object(');
@@ -326,13 +327,14 @@ class TreeObjectClassGenerator {
       if (i > 0) buffer.write(', ');
       buffer.write('\$_$constructorName');
     }
-    for (int i = 0; i < typeParams.length; i++) {
-      final fieldName = typeParams.values.elementAt(i);
+    final typeParamsList = typeParams.toList();
+    for (int i = 0; i < typeParamsList.length; i++) {
+      final fieldName = _typeParamToFieldName(typeParamsList[i]);
       buffer.write(', \$_$fieldName');
     }
     buffer.writeln(')\';');
     buffer.writeln();
-    
+
     // Generate operator==
     buffer.writeln('  @override');
     buffer.writeln('  bool operator ==(Object other) =>');
@@ -340,11 +342,11 @@ class TreeObjectClassGenerator {
     buffer.write('      other is ${schema.title}Object');
     if (typeParams.isNotEmpty) {
       buffer.write('<');
-      buffer.write(typeParams.keys.join(', '));
+      buffer.write(typeParams.join(', '));
       buffer.write('>');
     }
     buffer.write(' &&');
-    
+
     // Compare all fields
     for (int i = 0; i < types.length; i++) {
       final constructorName = _getConstructorName(types[i]);
@@ -352,28 +354,31 @@ class TreeObjectClassGenerator {
       buffer.write('      _$constructorName == other._$constructorName');
       if (i < types.length - 1 || typeParams.isNotEmpty) buffer.write(' &&');
     }
-    
-    for (int i = 0; i < typeParams.length; i++) {
-      final fieldName = typeParams.values.elementAt(i);
+
+    for (int i = 0; i < typeParamsList.length; i++) {
+      final fieldName = _typeParamToFieldName(typeParamsList[i]);
       buffer.writeln();
       buffer.write('      _$fieldName == other._$fieldName');
-      if (i < typeParams.length - 1) buffer.write(' &&');
+      if (i < typeParamsList.length - 1) buffer.write(' &&');
     }
     buffer.writeln(';');
     buffer.writeln();
-    
+
     // Generate hashCode
     buffer.writeln('  @override');
     buffer.write('  int get hashCode => Object.hash(');
-    final allFields = [...types.map((t) => '_${_getConstructorName(t)}'), ...typeParams.values.map((f) => '_$f')];
+    final allFields = [
+      ...types.map((t) => '_${_getConstructorName(t)}'),
+      ...typeParams.map((tp) => '_${_typeParamToFieldName(tp)}'),
+    ];
     buffer.write(allFields.join(', '));
     buffer.writeln(');');
-    
+
     buffer.writeln('}');
-    
+
     return buffer.toString();
   }
-  
+
   /// Gets the constructor name for a union type.
   String _getConstructorName(SchemaInfo type) {
     if (type.title == 'String') return 'string';
@@ -384,7 +389,7 @@ class TreeObjectClassGenerator {
     final title = type.title;
     return title[0].toLowerCase() + title.substring(1);
   }
-  
+
   /// Gets the Dart type name for a union member.
   String _getUnionDartType(SchemaInfo type) {
     if (type.title == 'String') return 'StringValue';
@@ -403,7 +408,7 @@ class TreeObjectClassGenerator {
     }
   }
 
-  /// Generates the constructor with validation.
+  /// Generates the constructor.
   void _generateConstructor(StringBuffer buffer) {
     buffer.writeln('  ${schema.title}Object({');
 
@@ -413,32 +418,16 @@ class TreeObjectClassGenerator {
       buffer.writeln('    ${prefix}this.${property.name},');
     }
 
-    buffer.writeln('  }) {');
-
-    // Validation code in constructor body
-    for (final property in schema.properties.values) {
-      final validation = validationGenerator.generateValidation(
-        property.name,
-        property.type,
-        property.constraints,
-        isNullable: property.nullable,
-      );
-
-      if (validation.isNotEmpty) {
-        buffer.writeln('    $validation');
-      }
-    }
-
-    buffer.writeln('  }');
+    buffer.writeln('  });');
   }
 
   /// Generates toJson method.
   void _generateToJson(StringBuffer buffer) {
     buffer.writeln('  @override');
     buffer.writeln('  String toJson() {');
-    
+
     final properties = schema.properties.values.toList();
-    
+
     // Optimize for single non-nullable property
     if (properties.length == 1 && !properties[0].nullable) {
       final property = properties[0];
@@ -448,15 +437,15 @@ class TreeObjectClassGenerator {
       buffer.writeln('  }');
       return;
     }
-    
+
     // Check if we have at least one required property
     final hasRequiredProperty = properties.any((p) => !p.nullable);
     final firstRequiredIndex = properties.indexWhere((p) => !p.nullable);
-    
+
     // General case with multiple or nullable properties
     buffer.writeln('    final buffer = StringBuffer();');
     buffer.writeln('    buffer.write(\'{\');');
-    
+
     // Only need index tracking if we have nullable properties before the first required one
     final needsIndex = firstRequiredIndex > 0 || !hasRequiredProperty;
     if (needsIndex) {
@@ -468,7 +457,7 @@ class TreeObjectClassGenerator {
       final propAccess = _propertyAccess(property.name);
       final escapedName = _escapePropertyName(property.name);
       final isAfterRequired = hasRequiredProperty && i > firstRequiredIndex;
-      
+
       if (property.nullable) {
         buffer.writeln('    if ($propAccess != null) {');
         if (isAfterRequired) {
@@ -509,9 +498,9 @@ class TreeObjectClassGenerator {
   void _generateToYaml(StringBuffer buffer) {
     buffer.writeln('  @override');
     buffer.writeln('  String toYaml() {');
-    
+
     final properties = schema.properties.values.toList();
-    
+
     // Optimize for single non-nullable property
     if (properties.length == 1 && !properties[0].nullable) {
       final property = properties[0];
@@ -521,14 +510,14 @@ class TreeObjectClassGenerator {
       buffer.writeln('  }');
       return;
     }
-    
+
     // Check if we have at least one required property
     final hasRequiredProperty = properties.any((p) => !p.nullable);
     final firstRequiredIndex = properties.indexWhere((p) => !p.nullable);
-    
+
     // General case with multiple or nullable properties
     buffer.writeln('    final buffer = StringBuffer();');
-    
+
     // Only need index tracking if we have nullable properties before the first required one
     final needsIndex = firstRequiredIndex > 0 || !hasRequiredProperty;
     if (needsIndex) {
@@ -540,7 +529,7 @@ class TreeObjectClassGenerator {
       final propAccess = _propertyAccess(property.name);
       final escapedName = _escapePropertyName(property.name);
       final isAfterRequired = hasRequiredProperty && i > firstRequiredIndex;
-      
+
       if (property.nullable) {
         buffer.writeln('    if ($propAccess != null) {');
         if (isAfterRequired) {
@@ -593,25 +582,23 @@ class TreeObjectClassGenerator {
     if (hasAllowed || hasRequired || hasNullable) {
       buffer.writeln('        \$checkKeys(');
       buffer.writeln('          map,');
-      
+
       if (hasAllowed) {
         buffer.writeln('          allowedKeys: const [${schema.allowed!.map((k) => '\'$k\'').join(', ')}],');
       }
-      
+
       if (hasRequired) {
         buffer.writeln('          requiredKeys: const [${schema.required.map((k) => '\'$k\'').join(', ')}],');
       }
-      
+
       if (hasNullable) {
         // disallowNullValues should be properties that are NOT in the nullable list
-        final disallowNull = schema.properties.keys
-            .where((key) => !schema.nullable!.contains(key))
-            .toList();
+        final disallowNull = schema.properties.keys.where((key) => !schema.nullable!.contains(key)).toList();
         if (disallowNull.isNotEmpty) {
           buffer.writeln('          disallowNullValues: const [${disallowNull.map((k) => '\'$k\'').join(', ')}],');
         }
       }
-      
+
       buffer.writeln('        );');
     }
 
@@ -647,25 +634,23 @@ class TreeObjectClassGenerator {
     if (hasAllowed || hasRequired || hasNullable) {
       buffer.writeln('        \$checkKeys(');
       buffer.writeln('          map,');
-      
+
       if (hasAllowed) {
         buffer.writeln('          allowedKeys: const [${schema.allowed!.map((k) => '\'$k\'').join(', ')}],');
       }
-      
+
       if (hasRequired) {
         buffer.writeln('          requiredKeys: const [${schema.required.map((k) => '\'$k\'').join(', ')}],');
       }
-      
+
       if (hasNullable) {
         // disallowNullValues should be properties that are NOT in the nullable list
-        final disallowNull = schema.properties.keys
-            .where((key) => !schema.nullable!.contains(key))
-            .toList();
+        final disallowNull = schema.properties.keys.where((key) => !schema.nullable!.contains(key)).toList();
         if (disallowNull.isNotEmpty) {
           buffer.writeln('          disallowNullValues: const [${disallowNull.map((k) => '\'$k\'').join(', ')}],');
         }
       }
-      
+
       buffer.writeln('        );');
     }
 
@@ -686,10 +671,8 @@ class TreeObjectClassGenerator {
 
   /// Gets the checked convert call for a property.
   String _getCheckedConvertCall(PropertyInfo property, {required bool isJson}) {
-    final convertLogic = isJson 
-        ? _getFromJsonConvertLogic(property) 
-        : _getFromYamlConvertLogic(property);
-    
+    final convertLogic = isJson ? _getFromJsonConvertLogic(property) : _getFromYamlConvertLogic(property);
+
     final escapedName = _escapePropertyName(property.name);
     return '\$checkedConvert(\'$escapedName\', (v) => $convertLogic)';
   }
@@ -721,6 +704,8 @@ class TreeObjectClassGenerator {
         return 'DoubleValue.fromJson($varName as String)';
       case SchemaType.boolean:
         return 'BoolValue.fromJson($varName as String)';
+      case SchemaType.typeParameter:
+        return 'deserializers.fromJson<${property.typeParameterName}Object>($varName as String)';
       case SchemaType.object:
         return '${property.referencedSchema!.title}Object.fromJson($varName as String)';
       case SchemaType.array:
@@ -750,6 +735,8 @@ class TreeObjectClassGenerator {
         return 'DoubleValue.fromYaml($varName as String)';
       case SchemaType.boolean:
         return 'BoolValue.fromYaml($varName as String)';
+      case SchemaType.typeParameter:
+        return 'deserializers.fromYaml<${property.typeParameterName}Object>($varName as String)';
       case SchemaType.object:
         return '${property.referencedSchema!.title}Object.fromYaml($varName as String)';
       case SchemaType.array:
@@ -779,13 +766,18 @@ class TreeObjectClassGenerator {
         return 'DoubleValue';
       case SchemaType.boolean:
         return 'BoolValue';
+      case SchemaType.typeParameter:
+        // Type parameter - use the type parameter name directly with Object suffix
+        return '${property.typeParameterName}Object';
       case SchemaType.object:
         return '${property.referencedSchema!.title}Object';
       case SchemaType.array:
         if (property.referencedSchema != null) {
-          return '${property.name.capitalize()}ListObject';
+          // Use Set or List based on uniqueItems
+          final collectionType = property.uniqueItems ? 'Set' : 'List';
+          return '${property.name.capitalize()}${collectionType}Object';
         }
-        return 'ListObject<TreeObject>';
+        return property.uniqueItems ? 'SetObject<TreeObject>' : 'ListObject<TreeObject>';
       case SchemaType.union:
         // Use the referenced schema's generated union type
         if (property.referencedSchema != null) {
@@ -794,6 +786,4 @@ class TreeObjectClassGenerator {
         return 'UnionObject2<TreeObject, TreeObject>';
     }
   }
-
 }
-

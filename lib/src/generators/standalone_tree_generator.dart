@@ -36,17 +36,17 @@ class StandaloneTreeGenerator {
 
     // Imports
     buffer.writeln("import 'package:dart_tree/dart_tree.dart';");
-    
+
     // Import all TreeObject files
     for (final schema in schemas) {
       buffer.writeln("import '../objects/${_toSnakeCase(schema.title)}_object.dart';");
     }
-    
+
     // Import all TreeNode files
     for (final schema in schemas) {
       buffer.writeln("import '../nodes/${_toSnakeCase(schema.title)}_node.dart';");
     }
-    
+
     buffer.writeln();
 
     // Generate Tree class
@@ -57,7 +57,7 @@ class StandaloneTreeGenerator {
     buffer.writeln();
     buffer.writeln('  @override');
     buffer.writeln('  void fromObject<T extends TreeObject>(TreeObject object) {');
-    
+
     // Handle value objects
     buffer.writeln('    // Handle value objects');
     buffer.writeln('    if (object is StringValue) { StringValueNode.fromObject(this, null, \'/\', object); return; }');
@@ -66,52 +66,54 @@ class StandaloneTreeGenerator {
     buffer.writeln('    if (object is BoolValue) { BoolValueNode.fromObject(this, null, \'/\', object); return; }');
     buffer.writeln('    if (object is NullValue) { NullValueNode.fromObject(this, null, \'/\', object); return; }');
     buffer.writeln();
-    
+
     // Handle union objects - delegate to their concrete type
     buffer.writeln('    // Handle union objects - delegate to concrete type');
     for (final schema in schemas) {
       if (!schema.isUnion) continue;
-      
+
       final unionInfo = schema.unionInfo!;
       buffer.writeln('    if (object is ${schema.title}Object) {');
-      
+
       for (int i = 0; i < unionInfo.types.length; i++) {
         final type = unionInfo.types[i];
         final constructorName = _getConstructorName(type);
         final capitalizedName = constructorName[0].toUpperCase() + constructorName.substring(1);
-        
+
         if (i == 0) {
           buffer.writeln('      if (object.is$capitalizedName) { fromObject(object.as$capitalizedName!); return; }');
         } else {
-          buffer.writeln('      else if (object.is$capitalizedName) { fromObject(object.as$capitalizedName!); return; }');
+          buffer.writeln(
+            '      else if (object.is$capitalizedName) { fromObject(object.as$capitalizedName!); return; }',
+          );
         }
       }
-      
+
       // Handle type parameters if any
-      for (final entry in unionInfo.typeParameters.entries) {
-        final fieldName = entry.value;
+      for (final typeParam in unionInfo.typeParameters) {
+        final fieldName = typeParam[0].toLowerCase() + typeParam.substring(1);
         final capitalizedName = fieldName[0].toUpperCase() + fieldName.substring(1);
         buffer.writeln('      else if (object.is$capitalizedName) { fromObject(object.as$capitalizedName!); return; }');
       }
-      
+
       buffer.writeln('      return;');
       buffer.writeln('    }');
       buffer.writeln();
     }
-    
+
     // Handle generated objects
     buffer.writeln('    // Handle generated objects');
     for (final schema in schemas) {
       // Skip union schemas - they are handled by their underlying types
       if (schema.isUnion) continue;
-      
+
       buffer.writeln('    if (object is ${schema.title}Object) {');
       buffer.writeln('      ${schema.title}Node.fromObject(this, null, \'/\', object);');
       buffer.writeln('      return;');
       buffer.writeln('    }');
       buffer.writeln();
     }
-    
+
     buffer.writeln('  }');
     buffer.writeln('}');
 
@@ -128,6 +130,8 @@ class StandaloneTreeGenerator {
         return 'DoubleValueNode';
       case SchemaType.boolean:
         return 'BoolValueNode';
+      case SchemaType.typeParameter:
+        return '${property.typeParameterName}Node';
       case SchemaType.object:
         return '${property.referencedSchema!.title}Node';
       case SchemaType.array:
@@ -147,4 +151,3 @@ class StandaloneTreeGenerator {
     return input.split('_').map((w) => w[0].toUpperCase() + w.substring(1)).join('');
   }
 }
-

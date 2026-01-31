@@ -1,12 +1,10 @@
 import '../schema/schema_info.dart';
-import '../validation/validation_code_generator.dart';
 
 /// Generates TreeNode class code from a SchemaInfo.
 class TreeNodeClassGenerator {
   final SchemaInfo schema;
-  final ValidationCodeGenerator validationGenerator;
 
-  TreeNodeClassGenerator(this.schema) : validationGenerator = ValidationCodeGenerator();
+  TreeNodeClassGenerator(this.schema);
 
   /// Gets the proper way to access a property in code expressions.
   /// Always use 'this.' prefix to avoid conflicts with local variables.
@@ -72,6 +70,11 @@ class TreeNodeClassGenerator {
     return buffer.toString();
   }
 
+  /// Gets a field name from a type parameter name (lowercase first letter).
+  String _typeParamToFieldName(String typeParam) {
+    return typeParam[0].toLowerCase() + typeParam.substring(1);
+  }
+
   /// Generates a concrete union node class.
   String _generateUnion() {
     final unionInfo = schema.unionInfo!;
@@ -79,8 +82,8 @@ class TreeNodeClassGenerator {
     final typeParams = unionInfo.typeParameters;
     final totalTypes = types.length + typeParams.length;
 
-    if (totalTypes < 2 || totalTypes > 4) {
-      throw Exception('Union must have 2-4 total types, got $totalTypes');
+    if (totalTypes < 2) {
+      throw Exception('Union must have at least 2 total types, got $totalTypes');
     }
 
     final buffer = StringBuffer();
@@ -90,7 +93,7 @@ class TreeNodeClassGenerator {
     buffer.write('class ${schema.title}Node');
     if (typeParams.isNotEmpty) {
       buffer.write('<');
-      buffer.write(typeParams.keys.map((t) => '$t extends TreeNode').join(', '));
+      buffer.write(typeParams.map((t) => '$t extends TreeNode').join(', '));
       buffer.write('>');
     }
     buffer.writeln(' extends TreeNode {');
@@ -103,9 +106,8 @@ class TreeNodeClassGenerator {
     }
 
     // Generate nullable fields for type parameters
-    for (final entry in typeParams.entries) {
-      final typeParam = entry.key;
-      final fieldName = entry.value;
+    for (final typeParam in typeParams) {
+      final fieldName = _typeParamToFieldName(typeParam);
       buffer.writeln('  final $typeParam? _$fieldName;');
     }
     buffer.writeln();
@@ -127,7 +129,8 @@ class TreeNodeClassGenerator {
       }
 
       // Set type parameter fields to null
-      for (final fieldName in typeParams.values) {
+      for (final typeParam in typeParams) {
+        final fieldName = _typeParamToFieldName(typeParam);
         buffer.write(', _$fieldName = null');
       }
       buffer.writeln(';');
@@ -135,9 +138,8 @@ class TreeNodeClassGenerator {
     }
 
     // Generate named constructors for type parameters
-    for (final entry in typeParams.entries) {
-      final typeParam = entry.key;
-      final fieldName = entry.value;
+    for (final typeParam in typeParams) {
+      final fieldName = _typeParamToFieldName(typeParam);
       buffer.writeln('  /// Creates a ${schema.title} node with a $typeParam value.');
       buffer.write('  ${schema.title}Node.$fieldName($typeParam $fieldName, {super.id})');
       buffer.write(' : _$fieldName = $fieldName');
@@ -149,7 +151,8 @@ class TreeNodeClassGenerator {
       }
 
       // Set other type parameter fields to null
-      for (final otherFieldName in typeParams.values) {
+      for (final otherTypeParam in typeParams) {
+        final otherFieldName = _typeParamToFieldName(otherTypeParam);
         if (otherFieldName != fieldName) {
           buffer.write(', _$otherFieldName = null');
         }
@@ -169,10 +172,10 @@ class TreeNodeClassGenerator {
     }
 
     // Generate type checking getters for type parameters
-    for (final entry in typeParams.entries) {
-      final fieldName = entry.value;
+    for (final typeParam in typeParams) {
+      final fieldName = _typeParamToFieldName(typeParam);
       final capitalizedName = fieldName[0].toUpperCase() + fieldName.substring(1);
-      buffer.writeln('  /// Returns true if this union contains a ${entry.key}.');
+      buffer.writeln('  /// Returns true if this union contains a $typeParam.');
       buffer.writeln('  bool get is$capitalizedName => _$fieldName != null;');
       buffer.writeln();
     }
@@ -188,9 +191,8 @@ class TreeNodeClassGenerator {
     }
 
     // Generate type casting getters for type parameters
-    for (final entry in typeParams.entries) {
-      final typeParam = entry.key;
-      final fieldName = entry.value;
+    for (final typeParam in typeParams) {
+      final fieldName = _typeParamToFieldName(typeParam);
       final capitalizedName = fieldName[0].toUpperCase() + fieldName.substring(1);
       buffer.writeln('  /// Gets the value as $typeParam, or null if it\'s not that type.');
       buffer.writeln('  $typeParam? get as$capitalizedName => _$fieldName;');
@@ -217,11 +219,11 @@ class TreeNodeClassGenerator {
     }
 
     // Check type parameters
-    for (final entry in typeParams.entries) {
-      final fieldName = entry.value;
+    for (final typeParam in typeParams) {
+      final fieldName = _typeParamToFieldName(typeParam);
 
       buffer.writeln('    } else if (_$fieldName != null) {');
-      buffer.writeln('      return ${schema.title}Node.$fieldName(_$fieldName.clone() as ${entry.key});');
+      buffer.writeln('      return ${schema.title}Node.$fieldName(_$fieldName.clone() as $typeParam);');
     }
 
     buffer.writeln('    } else {');
@@ -244,7 +246,8 @@ class TreeNodeClassGenerator {
       }
     }
 
-    for (final fieldName in typeParams.values) {
+    for (final typeParam in typeParams) {
+      final fieldName = _typeParamToFieldName(typeParam);
       buffer.writeln('    else if (_$fieldName != null) return _$fieldName.accept(visitor);');
     }
 
@@ -260,8 +263,9 @@ class TreeNodeClassGenerator {
       if (i > 0) buffer.write(', ');
       buffer.write('\$_$constructorName');
     }
-    for (int i = 0; i < typeParams.length; i++) {
-      final fieldName = typeParams.values.elementAt(i);
+    final typeParamsList = typeParams.toList();
+    for (int i = 0; i < typeParamsList.length; i++) {
+      final fieldName = _typeParamToFieldName(typeParamsList[i]);
       buffer.write(', \$_$fieldName');
     }
     buffer.writeln(')\';');
@@ -281,7 +285,7 @@ class TreeNodeClassGenerator {
   }
 
   /// Generates toObject method for union nodes.
-  void _generateUnionToObject(StringBuffer buffer, List<SchemaInfo> types, Map<String, String> typeParams) {
+  void _generateUnionToObject(StringBuffer buffer, List<SchemaInfo> types, Set<String> typeParams) {
     buffer.writeln('  ${schema.title}Object toObject() {');
 
     // Check concrete types
@@ -300,9 +304,8 @@ class TreeNodeClassGenerator {
     }
 
     // Handle type parameters
-    for (final entry in typeParams.entries) {
-      final fieldName = entry.value;
-      final typeParam = entry.key;
+    for (final typeParam in typeParams) {
+      final fieldName = _typeParamToFieldName(typeParam);
 
       buffer.writeln('    } else if (_$fieldName != null) {');
       buffer.writeln('      return ${schema.title}Object.$fieldName(_$fieldName.toObject());');
@@ -324,7 +327,7 @@ class TreeNodeClassGenerator {
   }
 
   /// Generates fromObject method for union nodes.
-  void _generateUnionFromObject(StringBuffer buffer, List<SchemaInfo> types, Map<String, String> typeParams) {
+  void _generateUnionFromObject(StringBuffer buffer, List<SchemaInfo> types, Set<String> typeParams) {
     buffer.writeln(
       '  static void fromObject(Tree tree, TreeNode? parent, String key, ${schema.title}Object? object) {',
     );
@@ -347,10 +350,9 @@ class TreeNodeClassGenerator {
     }
 
     // Handle type parameters
-    for (final entry in typeParams.entries) {
-      final fieldName = entry.value;
+    for (final typeParam in typeParams) {
+      final fieldName = _typeParamToFieldName(typeParam);
       final capitalizedName = fieldName[0].toUpperCase() + fieldName.substring(1);
-      final typeParam = entry.key;
 
       buffer.writeln('    } else if (object.is$capitalizedName) {');
       buffer.writeln('      tree.fromObject(object.as$capitalizedName!);');
@@ -422,9 +424,8 @@ class TreeNodeClassGenerator {
     }
 
     // Handle type parameters if any
-    for (final entry in unionInfo.typeParameters.entries) {
-      final fieldName = entry.value;
-      final typeParam = entry.key;
+    for (final typeParam in unionInfo.typeParameters) {
+      final fieldName = _typeParamToFieldName(typeParam);
       buffer.writeln('      $typeParam => $unionNodeType.$fieldName(child as $typeParam),');
     }
 
@@ -468,12 +469,6 @@ class TreeNodeClassGenerator {
         buffer.writeln('      }');
         buffer.writeln('      return removedSubtree;');
         buffer.writeln('    }');
-      }
-
-      // Generate validation
-      final validation = _generateSetterValidation(property, 'value.value');
-      if (validation.isNotEmpty) {
-        buffer.writeln('    $validation');
       }
 
       // Replace the node in the tree
@@ -605,6 +600,12 @@ class TreeNodeClassGenerator {
           return '$propAccess?.toObject()';
         }
         return '$propAccess.toObject()';
+      case SchemaType.typeParameter:
+        // Type parameter nodes - call toObject()
+        if (property.nullable) {
+          return '$propAccess?.toObject()';
+        }
+        return '$propAccess.toObject()';
       case SchemaType.object:
         // Object nodes - call toObject()
         if (property.nullable) {
@@ -668,6 +669,9 @@ class TreeNodeClassGenerator {
         return 'DoubleValueNode';
       case SchemaType.boolean:
         return 'BoolValueNode';
+      case SchemaType.typeParameter:
+        // Type parameter - use the type parameter name directly with Node suffix
+        return '${property.typeParameterName}Node';
       case SchemaType.object:
         return '${property.referencedSchema!.title}Node';
       case SchemaType.array:
@@ -675,9 +679,11 @@ class TreeNodeClassGenerator {
           final capitalizedName = property.name.isEmpty
               ? property.name
               : property.name[0].toUpperCase() + property.name.substring(1);
-          return '${capitalizedName}ListNode';
+          // Use Set or List based on uniqueItems
+          final collectionType = property.uniqueItems ? 'Set' : 'List';
+          return '${capitalizedName}${collectionType}Node';
         }
-        return 'ListTreeNode';
+        return property.uniqueItems ? 'SetTreeNode' : 'ListTreeNode';
       case SchemaType.union:
         // Use the referenced schema's generated union node type
         if (property.referencedSchema != null) {
@@ -698,6 +704,9 @@ class TreeNodeClassGenerator {
         return 'DoubleValue';
       case SchemaType.boolean:
         return 'BoolValue';
+      case SchemaType.typeParameter:
+        // Type parameter - use the type parameter name directly with Object suffix
+        return '${property.typeParameterName}Object';
       case SchemaType.object:
         return '${property.referencedSchema!.title}Object';
       case SchemaType.array:
@@ -705,9 +714,11 @@ class TreeNodeClassGenerator {
           final capitalizedName = property.name.isEmpty
               ? property.name
               : property.name[0].toUpperCase() + property.name.substring(1);
-          return '${capitalizedName}ListObject';
+          // Use Set or List based on uniqueItems
+          final collectionType = property.uniqueItems ? 'Set' : 'List';
+          return '${capitalizedName}${collectionType}Object';
         }
-        return 'ListObject<TreeObject>';
+        return property.uniqueItems ? 'SetObject<TreeObject>' : 'ListObject<TreeObject>';
       case SchemaType.union:
         if (property.referencedSchema != null) {
           return '${property.referencedSchema!.title}Object';
@@ -754,121 +765,5 @@ class TreeNodeClassGenerator {
         type == SchemaType.integer ||
         type == SchemaType.number ||
         type == SchemaType.boolean;
-  }
-
-  /// Generates validation code for a setter.
-  String _generateSetterValidation(PropertyInfo property, String valueName) {
-    if (!property.constraints.hasConstraints) {
-      return '';
-    }
-
-    final buffer = StringBuffer();
-
-    switch (property.type) {
-      case SchemaType.string:
-        _generateStringSetterValidation(buffer, property, valueName);
-        break;
-      case SchemaType.integer:
-      case SchemaType.number:
-        _generateNumberSetterValidation(buffer, property, valueName);
-        break;
-      default:
-        break;
-    }
-
-    return buffer.toString();
-  }
-
-  /// Generates string validation for setter.
-  void _generateStringSetterValidation(StringBuffer buffer, PropertyInfo property, String valueName) {
-    final constraints = property.constraints;
-    final checks = <String>[];
-
-    if (constraints.minLength != null) {
-      checks.add('$valueName.length < ${constraints.minLength}');
-    }
-
-    if (constraints.maxLength != null) {
-      checks.add('$valueName.length > ${constraints.maxLength}');
-    }
-
-    if (constraints.pattern != null) {
-      buffer.writeln('final _pattern = RegExp(r\'${constraints.pattern}\');');
-      checks.add('!_pattern.hasMatch($valueName)');
-    }
-
-    if (checks.isNotEmpty) {
-      buffer.write('if (${checks.join(' || ')}) {');
-      buffer.write('throw ArgumentError(\'');
-
-      final errorParts = <String>[];
-      if (constraints.minLength != null && constraints.maxLength != null) {
-        errorParts.add('${property.name} must be ${constraints.minLength}-${constraints.maxLength} characters');
-      } else if (constraints.minLength != null) {
-        errorParts.add('${property.name} must be at least ${constraints.minLength} characters');
-      } else if (constraints.maxLength != null) {
-        errorParts.add('${property.name} must be at most ${constraints.maxLength} characters');
-      }
-
-      if (constraints.pattern != null) {
-        errorParts.add('${property.name} must match pattern: ${constraints.pattern}');
-      }
-
-      buffer.write(errorParts.join(', '));
-      buffer.write('\');');
-      buffer.write('}');
-    }
-  }
-
-  /// Generates number validation for setter.
-  void _generateNumberSetterValidation(StringBuffer buffer, PropertyInfo property, String valueName) {
-    final constraints = property.constraints;
-    final checks = <String>[];
-
-    if (constraints.minimum != null) {
-      checks.add('$valueName < ${constraints.minimum}');
-    }
-
-    if (constraints.exclusiveMinimum != null) {
-      checks.add('$valueName <= ${constraints.exclusiveMinimum}');
-    }
-
-    if (constraints.maximum != null) {
-      checks.add('$valueName > ${constraints.maximum}');
-    }
-
-    if (constraints.exclusiveMaximum != null) {
-      checks.add('$valueName >= ${constraints.exclusiveMaximum}');
-    }
-
-    if (constraints.multipleOf != null) {
-      checks.add('($valueName % ${constraints.multipleOf}) != 0');
-    }
-
-    if (checks.isNotEmpty) {
-      buffer.write('if (${checks.join(' || ')}) {');
-      buffer.write('throw ArgumentError(\'');
-
-      final errorParts = <String>[];
-      if (constraints.minimum != null) {
-        errorParts.add('${property.name} must be >= ${constraints.minimum}');
-      }
-      if (constraints.exclusiveMinimum != null) {
-        errorParts.add('${property.name} must be > ${constraints.exclusiveMinimum}');
-      }
-      if (constraints.maximum != null) {
-        errorParts.add('${property.name} must be <= ${constraints.maximum}');
-      }
-      if (constraints.exclusiveMaximum != null) {
-        errorParts.add('${property.name} must be < ${constraints.exclusiveMaximum}');
-      }
-      if (constraints.multipleOf != null) {
-        errorParts.add('${property.name} must be a multiple of ${constraints.multipleOf}');
-      }
-
-      buffer.write(errorParts.join(', '));
-      buffer.write('\');');
-      buffer.write('}');
-    }
   }
 }
