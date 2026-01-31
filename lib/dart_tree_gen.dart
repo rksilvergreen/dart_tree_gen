@@ -5,3 +5,4 @@
 library;
 
 export 'src/tree_object_generator.dart';
+export 'src/schema/schema.dart';
