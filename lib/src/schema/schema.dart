@@ -1,103 +1,83 @@
 // enum ????
 
+class _Tree {
+  const _Tree();
+}
+
+const tree = _Tree();
+
 class $Tree {
-  final Map<String, $Schema> schemas;
+  final String name;
+  final List<_$Schema> schemas;
 
-  const $Tree({required this.schemas});
+  const $Tree({required this.name, required this.schemas});
 }
 
-class _Schema {
-  const _Schema();
+abstract class _$Schema {
+  const _$Schema();
 }
 
-const schema = const _Schema();
-
-abstract class $Schema {
-  final String? title;
-
-  const $Schema({this.title});
-}
-
-class $Union extends $Schema {
-  final Set<$Schema>? types;
-  final Map<String, String> typeParameters;
-  const $Union({required super.title, this.types, this.typeParameters = const {}});
-}
-
-class $Integer extends $Schema {
-  final int? minimum;
-  final int? exclusiveMinimum;
-  final int? maximum;
-  final int? exclusiveMaximum;
-  final int? multipleOf;
-
-  const $Integer({
-    super.title,
-    this.minimum,
-    this.exclusiveMinimum,
-    this.maximum,
-    this.exclusiveMaximum,
-    this.multipleOf,
-  });
-}
-
-class $Double extends $Schema {
-  final double? minimum;
-  final double? exclusiveMinimum;
-  final double? maximum;
-  final double? exclusiveMaximum;
-  final double? multipleOf;
-
-  const $Double({
-    super.title,
-    this.minimum,
-    this.exclusiveMinimum,
-    this.maximum,
-    this.exclusiveMaximum,
-    this.multipleOf,
-  });
-}
-
-class $String extends $Schema {
-  final String? pattern;
-  final int? minLength;
-  final int? maxLength;
-  final String? format;
-
-  const $String({super.title, this.pattern, this.minLength, this.maxLength, this.format});
-}
-
-class $Boolean extends $Schema {
-  const $Boolean({super.title});
-}
-
-class $Array extends $Schema {
-  final $Schema? items;
-  final int? minItems;
-  final int? maxItems;
-  final bool? uniqueItems;
-
-  const $Array({super.title, this.items, this.minItems, this.maxItems, this.uniqueItems});
-}
-
-class $Object extends $Schema {
-  final int? minProperties;
-  final int? maxProperties;
+class $Schema extends _$Schema {
+  final String name;
+  final Set<String> typeParameters;
   final List<String>? required;
   final List<String>? allowed;
   final List<String>? nullable;
-  final Map<String, $Schema>? properties;
-  final Map<String, $Schema>? patternProperties;
+  final Map<String, $Type>? properties;
 
-  const $Object({
-    super.title,
-    this.minProperties,
-    this.maxProperties,
+  const $Schema({
+    required this.name,
+    this.typeParameters = const {},
     this.required,
     this.allowed,
     this.nullable,
     this.properties,
-    this.patternProperties,
   });
 }
 
+class $Union extends _$Schema {
+  final String name;
+  final Set<String> typeParameters;
+  final Set<$Type> types;
+  
+  const $Union({required this.name, this.typeParameters = const {}, this.types = const {}});
+}
+
+abstract class $Type {
+  const $Type();
+}
+
+class $TypeParameter extends $Type {
+  final String name;
+  const $TypeParameter(this.name);
+}
+
+class $Object extends $Type {
+  final _$Schema schema;
+  final Map<String, $Type> typeParameters;
+
+  const $Object({required this.schema, this.typeParameters = const {}});
+}
+
+class $Array extends $Type {
+  final $Type? items;
+  final bool? uniqueItems;
+
+  const $Array({this.items, this.uniqueItems});
+}
+
+class $Integer extends $Type {
+  const $Integer();
+}
+
+class $Double extends $Type {
+  const $Double();
+}
+
+class $String extends $Type {
+  const $String();
+}
+
+class $Boolean extends $Type {
+  const $Boolean();
+}
