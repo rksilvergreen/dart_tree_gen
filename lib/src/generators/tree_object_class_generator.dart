@@ -29,6 +29,16 @@ class TreeObjectClassGenerator {
     return propertyName;
   }
 
+  /// Formats a list of property names for use in const list literals in generated code.
+  static String _formatPropertyNamesList(List<String> names) {
+    return names
+        .map((k) {
+          final escaped = _escapePropertyName(k);
+          return '\'$escaped\'';
+        })
+        .join(', ');
+  }
+
   /// Generates the complete TreeObject class code.
   String generate() {
     // Check if this is a union schema
@@ -40,7 +50,13 @@ class TreeObjectClassGenerator {
 
     // Class declaration
     buffer.writeln('/// Generated TreeObject class for ${schema.title}');
-    buffer.writeln('class ${schema.title}Object extends TreeObject {');
+    buffer.write('class ${schema.title}Object');
+    if (schema.typeParameters.isNotEmpty) {
+      buffer.write('<');
+      buffer.write(schema.typeParameters.map((t) => '$t extends TreeObject').join(', '));
+      buffer.write('>');
+    }
+    buffer.writeln(' extends TreeObject {');
 
     // Generate fields
     _generateFields(buffer);
@@ -433,7 +449,11 @@ class TreeObjectClassGenerator {
       final property = properties[0];
       final propAccess = _propertyAccess(property.name);
       final escapedName = _escapePropertyName(property.name);
-      buffer.writeln('    return \'{"$escapedName": \' + $propAccess.toJson() + \'}\';');
+      buffer.write('    return \'{"');
+      buffer.write(escapedName);
+      buffer.write('": \' + ');
+      buffer.write(propAccess);
+      buffer.writeln('.toJson() + \'}\';');
       buffer.writeln('  }');
       return;
     }
@@ -469,7 +489,10 @@ class TreeObjectClassGenerator {
         } else {
           buffer.writeln('      buffer.write(\', \');');
         }
-        buffer.writeln('      buffer.write(\'"$escapedName": \');');
+        buffer.write('      buffer.write(\'');
+        buffer.write('"');
+        buffer.write(escapedName);
+        buffer.writeln('": \');');
         buffer.writeln('      buffer.write($propAccess!.toJson());');
         buffer.writeln('    }');
       } else {
@@ -481,7 +504,10 @@ class TreeObjectClassGenerator {
             buffer.writeln('    buffer.write(\', \');');
           }
         }
-        buffer.writeln('    buffer.write(\'"$escapedName": \');');
+        buffer.write('    buffer.write(\'');
+        buffer.write('"');
+        buffer.write(escapedName);
+        buffer.writeln('": \');');
         buffer.writeln('    buffer.write($propAccess.toJson());');
         if (needsIndex && i <= firstRequiredIndex) {
           buffer.writeln('    index++;');
@@ -506,7 +532,11 @@ class TreeObjectClassGenerator {
       final property = properties[0];
       final propAccess = _propertyAccess(property.name);
       final escapedName = _escapePropertyName(property.name);
-      buffer.writeln('    return \'$escapedName: \' + $propAccess.toYaml();');
+      buffer.write('    return \'');
+      buffer.write(escapedName);
+      buffer.write(': \' + ');
+      buffer.write(propAccess);
+      buffer.writeln('.toYaml();');
       buffer.writeln('  }');
       return;
     }
@@ -541,7 +571,9 @@ class TreeObjectClassGenerator {
         } else {
           buffer.writeln('      buffer.writeln();');
         }
-        buffer.writeln('      buffer.write(\'$escapedName: \');');
+        buffer.write('      buffer.write(\'');
+        buffer.write(escapedName);
+        buffer.writeln(': \');');
         buffer.writeln('      buffer.write($propAccess!.toYaml());');
         buffer.writeln('    }');
       } else {
@@ -553,7 +585,9 @@ class TreeObjectClassGenerator {
             buffer.writeln('    buffer.writeln();');
           }
         }
-        buffer.writeln('    buffer.write(\'$escapedName: \');');
+        buffer.write('    buffer.write(\'');
+        buffer.write(escapedName);
+        buffer.writeln(': \');');
         buffer.writeln('    buffer.write($propAccess.toYaml());');
         if (needsIndex && i <= firstRequiredIndex) {
           buffer.writeln('    index++;');
@@ -567,7 +601,19 @@ class TreeObjectClassGenerator {
 
   /// Generates fromJson factory.
   void _generateFromJson(StringBuffer buffer) {
-    buffer.writeln('  static ${schema.title}Object fromJson(String json) {');
+    buffer.write('  static ${schema.title}Object');
+    if (schema.typeParameters.isNotEmpty) {
+      buffer.write('<');
+      buffer.write(schema.typeParameters.join(', '));
+      buffer.write('>');
+    }
+    buffer.write(' fromJson');
+    if (schema.typeParameters.isNotEmpty) {
+      buffer.write('<');
+      buffer.write(schema.typeParameters.map((t) => '$t extends TreeObject').join(', '));
+      buffer.write('>');
+    }
+    buffer.writeln('(String json) {');
     buffer.writeln('    final map = extractJsonObjectFields(json);');
     buffer.writeln('    return \$checkedCreate(');
     buffer.writeln('      \'${schema.title}Object\',');
@@ -584,18 +630,18 @@ class TreeObjectClassGenerator {
       buffer.writeln('          map,');
 
       if (hasAllowed) {
-        buffer.writeln('          allowedKeys: const [${schema.allowed!.map((k) => '\'$k\'').join(', ')}],');
+        buffer.writeln('          allowedKeys: const [${_formatPropertyNamesList(schema.allowed!)}],');
       }
 
       if (hasRequired) {
-        buffer.writeln('          requiredKeys: const [${schema.required.map((k) => '\'$k\'').join(', ')}],');
+        buffer.writeln('          requiredKeys: const [${_formatPropertyNamesList(schema.required)}],');
       }
 
       if (hasNullable) {
         // disallowNullValues should be properties that are NOT in the nullable list
         final disallowNull = schema.properties.keys.where((key) => !schema.nullable!.contains(key)).toList();
         if (disallowNull.isNotEmpty) {
-          buffer.writeln('          disallowNullValues: const [${disallowNull.map((k) => '\'$k\'').join(', ')}],');
+          buffer.writeln('          disallowNullValues: const [${_formatPropertyNamesList(disallowNull)}],');
         }
       }
 
@@ -603,7 +649,13 @@ class TreeObjectClassGenerator {
     }
 
     // Generate the object construction
-    buffer.writeln('        final val = ${schema.title}Object(');
+    buffer.write('        final val = ${schema.title}Object');
+    if (schema.typeParameters.isNotEmpty) {
+      buffer.write('<');
+      buffer.write(schema.typeParameters.join(', '));
+      buffer.write('>');
+    }
+    buffer.writeln('(');
 
     for (final property in schema.properties.values) {
       final decoder = _getCheckedConvertCall(property, isJson: true);
@@ -619,7 +671,19 @@ class TreeObjectClassGenerator {
 
   /// Generates fromYaml factory.
   void _generateFromYaml(StringBuffer buffer) {
-    buffer.writeln('  static ${schema.title}Object fromYaml(String yaml) {');
+    buffer.write('  static ${schema.title}Object');
+    if (schema.typeParameters.isNotEmpty) {
+      buffer.write('<');
+      buffer.write(schema.typeParameters.join(', '));
+      buffer.write('>');
+    }
+    buffer.write(' fromYaml');
+    if (schema.typeParameters.isNotEmpty) {
+      buffer.write('<');
+      buffer.write(schema.typeParameters.map((t) => '$t extends TreeObject').join(', '));
+      buffer.write('>');
+    }
+    buffer.writeln('(String yaml) {');
     buffer.writeln('    final map = extractYamlMappingFields(yaml);');
     buffer.writeln('    return \$checkedCreate(');
     buffer.writeln('      \'${schema.title}Object\',');
@@ -636,18 +700,18 @@ class TreeObjectClassGenerator {
       buffer.writeln('          map,');
 
       if (hasAllowed) {
-        buffer.writeln('          allowedKeys: const [${schema.allowed!.map((k) => '\'$k\'').join(', ')}],');
+        buffer.writeln('          allowedKeys: const [${_formatPropertyNamesList(schema.allowed!)}],');
       }
 
       if (hasRequired) {
-        buffer.writeln('          requiredKeys: const [${schema.required.map((k) => '\'$k\'').join(', ')}],');
+        buffer.writeln('          requiredKeys: const [${_formatPropertyNamesList(schema.required)}],');
       }
 
       if (hasNullable) {
         // disallowNullValues should be properties that are NOT in the nullable list
         final disallowNull = schema.properties.keys.where((key) => !schema.nullable!.contains(key)).toList();
         if (disallowNull.isNotEmpty) {
-          buffer.writeln('          disallowNullValues: const [${disallowNull.map((k) => '\'$k\'').join(', ')}],');
+          buffer.writeln('          disallowNullValues: const [${_formatPropertyNamesList(disallowNull)}],');
         }
       }
 
@@ -655,7 +719,13 @@ class TreeObjectClassGenerator {
     }
 
     // Generate the object construction
-    buffer.writeln('        final val = ${schema.title}Object(');
+    buffer.write('        final val = ${schema.title}Object');
+    if (schema.typeParameters.isNotEmpty) {
+      buffer.write('<');
+      buffer.write(schema.typeParameters.join(', '));
+      buffer.write('>');
+    }
+    buffer.writeln('(');
 
     for (final property in schema.properties.values) {
       final decoder = _getCheckedConvertCall(property, isJson: false);
@@ -705,9 +775,14 @@ class TreeObjectClassGenerator {
       case SchemaType.boolean:
         return 'BoolValue.fromJson($varName as String)';
       case SchemaType.typeParameter:
-        return 'deserializers.fromJson<${property.typeParameterName}Object>($varName as String)';
+        return 'deserializers.fromJson<${property.typeParameterName}>($varName as String)';
       case SchemaType.object:
-        return '${property.referencedSchema!.title}Object.fromJson($varName as String)';
+        final baseType = '${property.referencedSchema!.title}Object';
+        if (property.typeArguments != null && property.typeArguments!.isNotEmpty) {
+          final typeArgs = property.typeArguments!.values.map((argProp) => _getDartType(argProp)).join(', ');
+          return '$baseType.fromJson<$typeArgs>($varName as String)';
+        }
+        return '$baseType.fromJson($varName as String)';
       case SchemaType.array:
         if (property.referencedSchema != null) {
           final itemType = property.referencedSchema!.title;
@@ -736,9 +811,14 @@ class TreeObjectClassGenerator {
       case SchemaType.boolean:
         return 'BoolValue.fromYaml($varName as String)';
       case SchemaType.typeParameter:
-        return 'deserializers.fromYaml<${property.typeParameterName}Object>($varName as String)';
+        return 'deserializers.fromYaml<${property.typeParameterName}>($varName as String)';
       case SchemaType.object:
-        return '${property.referencedSchema!.title}Object.fromYaml($varName as String)';
+        final baseType = '${property.referencedSchema!.title}Object';
+        if (property.typeArguments != null && property.typeArguments!.isNotEmpty) {
+          final typeArgs = property.typeArguments!.values.map((argProp) => _getDartType(argProp)).join(', ');
+          return '$baseType.fromYaml<$typeArgs>($varName as String)';
+        }
+        return '$baseType.fromYaml($varName as String)';
       case SchemaType.array:
         if (property.referencedSchema != null) {
           final itemType = property.referencedSchema!.title;
@@ -767,10 +847,15 @@ class TreeObjectClassGenerator {
       case SchemaType.boolean:
         return 'BoolValue';
       case SchemaType.typeParameter:
-        // Type parameter - use the type parameter name directly with Object suffix
-        return '${property.typeParameterName}Object';
+        // Type parameter - use the type parameter name directly (no Object suffix)
+        return property.typeParameterName!;
       case SchemaType.object:
-        return '${property.referencedSchema!.title}Object';
+        final baseType = '${property.referencedSchema!.title}Object';
+        if (property.typeArguments != null && property.typeArguments!.isNotEmpty) {
+          final typeArgs = property.typeArguments!.values.map((argProp) => _getDartType(argProp)).join(', ');
+          return '$baseType<$typeArgs>';
+        }
+        return baseType;
       case SchemaType.array:
         if (property.referencedSchema != null) {
           // Use Set or List based on uniqueItems

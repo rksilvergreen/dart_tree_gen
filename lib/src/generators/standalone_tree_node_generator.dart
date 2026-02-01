@@ -19,30 +19,32 @@ class StandaloneTreeNodeGenerator {
 
     // Imports
     buffer.writeln("import 'package:dart_tree/dart_tree.dart';");
-    
+
     // Generate class using existing generator
     final classGenerator = TreeNodeClassGenerator(schema);
-    
+
     // Import referenced nodes (including unions)
     final importedNodes = <String>{};
-    
+
     // Import the object class for this node's fromObject method
     final importedObjects = <String>{schema.title};
-    
+
     for (final property in schema.properties.values) {
       if (property.referencedSchema != null) {
-        if (property.type == SchemaType.object || property.type == SchemaType.union || property.type == SchemaType.array) {
+        if (property.type == SchemaType.object ||
+            property.type == SchemaType.union ||
+            property.type == SchemaType.array) {
           importedNodes.add(property.referencedSchema!.title);
           // Also import the object class for setters
           importedObjects.add(property.referencedSchema!.title);
         }
-        
-        // If this property is a union, also import all its member types
-        if (property.type == SchemaType.union && property.referencedSchema!.isUnion) {
+
+        // If the referenced schema is a union, also import all its member types
+        if (property.referencedSchema!.isUnion) {
           for (final memberType in property.referencedSchema!.unionInfo!.types) {
-            if (memberType.title != 'String' && 
-                memberType.title != 'Integer' && 
-                memberType.title != 'Number' && 
+            if (memberType.title != 'String' &&
+                memberType.title != 'Integer' &&
+                memberType.title != 'Number' &&
                 memberType.title != 'Boolean') {
               importedNodes.add(memberType.title);
             }
@@ -54,27 +56,24 @@ class StandaloneTreeNodeGenerator {
         importedObjects.add('${className}List');
       }
     }
-    
+
     // For union schemas, import the types in the union
     if (schema.isUnion) {
       for (final type in schema.unionInfo!.types) {
-        if (type.title != 'String' && 
-            type.title != 'Integer' && 
-            type.title != 'Number' && 
-            type.title != 'Boolean') {
+        if (type.title != 'String' && type.title != 'Integer' && type.title != 'Number' && type.title != 'Boolean') {
           importedNodes.add(type.title);
         }
       }
     }
-    
+
     for (final refTitle in importedNodes) {
       buffer.writeln("import '${_toSnakeCase(refTitle)}_node.dart';");
     }
-    
+
     for (final refTitle in importedObjects) {
       buffer.writeln("import '../objects/${_toSnakeCase(refTitle)}_object.dart';");
     }
-    
+
     buffer.writeln();
 
     buffer.write(classGenerator.generate());
@@ -90,8 +89,7 @@ class StandaloneTreeNodeGenerator {
     // Find all properties in all schemas that reference this schema as an array item
     for (final otherSchema in allSchemas) {
       for (final property in otherSchema.properties.values) {
-        if (property.referencedSchema?.title == schema.title &&
-            property.type == SchemaType.array) {
+        if (property.referencedSchema?.title == schema.title && property.type == SchemaType.array) {
           final className = '${_capitalize(property.name)}ListNode';
           final listObjectType = '${_capitalize(property.name)}ListObject';
           final itemNodeType = '${schema.title}Node';
@@ -100,15 +98,21 @@ class StandaloneTreeNodeGenerator {
           buffer.writeln('class $className extends ListTreeNode<$itemNodeType> {');
           buffer.writeln('  $className({super.id});');
           buffer.writeln();
-          buffer.writeln('  $listObjectType toObject() => $listObjectType(this.map((node) => node.toObject()).toList());');
+          buffer.writeln(
+            '  $listObjectType toObject() => $listObjectType(this.map((node) => node.toObject()).toList());',
+          );
           buffer.writeln();
-          buffer.writeln('  static void fromObject(Tree tree, TreeNode? parent, String key, $listObjectType? object) {');
+          buffer.writeln(
+            '  static void fromObject(Tree tree, TreeNode? parent, String key, $listObjectType? object) {',
+          );
           buffer.writeln('    if (object == null) return;');
           buffer.writeln();
           buffer.writeln('    final parentRecord = tree.nodes[parent?.id];');
           buffer.writeln('    final pointer = Pointer.build(parentRecord?.pointer, key);');
           buffer.writeln('    final node = $className();');
-          buffer.writeln('    tree.\$nodes[node.id] = TreeNodeRecord(node: node, pointer: pointer, parent: parent?.id);');
+          buffer.writeln(
+            '    tree.\$nodes[node.id] = TreeNodeRecord(node: node, pointer: pointer, parent: parent?.id);',
+          );
           buffer.writeln('    parentRecord?.children[Edge($className, key)] = node.id;');
           buffer.writeln();
           buffer.writeln('    for (int i = 0; i < object.length; i++) {');
@@ -135,4 +139,3 @@ class StandaloneTreeNodeGenerator {
         .replaceFirst(RegExp(r'^_'), '');
   }
 }
-

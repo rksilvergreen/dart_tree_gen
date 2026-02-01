@@ -7,11 +7,7 @@ class StandaloneTreeObjectGenerator {
   final List<SchemaInfo> allSchemas;
   final String sourceBaseName;
 
-  StandaloneTreeObjectGenerator(
-    this.schema,
-    this.allSchemas,
-    this.sourceBaseName,
-  );
+  StandaloneTreeObjectGenerator(this.schema, this.allSchemas, this.sourceBaseName);
 
   String generate() {
     final buffer = StringBuffer();
@@ -23,18 +19,19 @@ class StandaloneTreeObjectGenerator {
 
     // Imports
     buffer.writeln("import 'package:dart_tree/dart_tree.dart';");
-    
-    // For union schemas, import the deserializers file with a prefix
-    if (schema.isUnion) {
+
+    // For union schemas or schemas with type parameters, import the deserializers file
+    final hasTypeParameterProperty = schema.properties.values.any((p) => p.type == SchemaType.typeParameter);
+    if (schema.isUnion || hasTypeParameterProperty) {
       buffer.writeln("import '../${sourceBaseName}_deserializers.dart' as deserializers;");
     }
-    
+
     // Generate class using existing generator
     final classGenerator = TreeObjectClassGenerator(schema);
-    
+
     // Import referenced objects (including unions)
     final importedObjects = <String>{};
-    
+
     for (final property in schema.properties.values) {
       if (property.type == SchemaType.object && property.referencedSchema != null) {
         final refTitle = property.referencedSchema!.title;
@@ -49,23 +46,20 @@ class StandaloneTreeObjectGenerator {
         importedObjects.add(refTitle);
       }
     }
-    
+
     // For union schemas, import the types in the union
     if (schema.isUnion) {
       for (final type in schema.unionInfo!.types) {
-        if (type.title != 'String' && 
-            type.title != 'Integer' && 
-            type.title != 'Number' && 
-            type.title != 'Boolean') {
+        if (type.title != 'String' && type.title != 'Integer' && type.title != 'Number' && type.title != 'Boolean') {
           importedObjects.add(type.title);
         }
       }
     }
-    
+
     for (final refTitle in importedObjects) {
       buffer.writeln("import '${_toSnakeCase(refTitle)}_object.dart';");
     }
-    
+
     buffer.writeln();
 
     buffer.write(classGenerator.generate());
@@ -81,8 +75,7 @@ class StandaloneTreeObjectGenerator {
     // Find all properties in all schemas that reference this schema as an array item
     for (final otherSchema in allSchemas) {
       for (final property in otherSchema.properties.values) {
-        if (property.referencedSchema?.title == schema.title &&
-            property.type == SchemaType.array) {
+        if (property.referencedSchema?.title == schema.title && property.type == SchemaType.array) {
           final className = '${_capitalize(property.name)}ListObject';
           buffer.writeln();
           buffer.writeln('/// Generated ListObject for ${property.name}');
@@ -105,4 +98,3 @@ class StandaloneTreeObjectGenerator {
         .replaceFirst(RegExp(r'^_'), '');
   }
 }
-
