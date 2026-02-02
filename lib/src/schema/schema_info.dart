@@ -12,9 +12,6 @@ class SchemaInfo {
   /// Whether this schema was directly annotated with @tree
   final bool isAnnotated;
 
-  /// Type parameters defined in this schema (e.g., {'T', 'U'})
-  final Set<String> typeParameters;
-
   /// Properties defined in this schema
   final Map<String, PropertyInfo> properties;
 
@@ -35,7 +32,6 @@ class SchemaInfo {
     required this.title,
     required this.isAnnotated,
     required this.properties,
-    this.typeParameters = const {},
     this.required = const [],
     this.allowed,
     this.nullable,
@@ -68,10 +64,7 @@ class PropertyInfo {
   /// Union information for union types
   final UnionInfo? unionInfo;
 
-  /// Type parameter name if this property uses a $TypeParameter
-  final String? typeParameterName;
-
-  /// Type arguments for $Object references (maps schema type param -> actual type)
+  /// Type arguments for $Object references (maps union type param -> actual type)
   final Map<String, PropertyInfo>? typeArguments;
 
   /// Whether array items should be unique (generates Set instead of List)
@@ -83,25 +76,13 @@ class PropertyInfo {
     required this.nullable,
     this.referencedSchema,
     this.unionInfo,
-    this.typeParameterName,
     this.typeArguments,
     this.uniqueItems = false,
   });
 }
 
 /// Type of schema property.
-enum SchemaType {
-  string,
-  integer,
-  number,
-  boolean,
-  object,
-  array,
-  union,
-
-  /// Represents a type parameter reference (e.g., $TypeParameter('T'))
-  typeParameter,
-}
+enum SchemaType { string, integer, number, boolean, object, array, union }
 
 /// Information about a union type.
 class UnionInfo {

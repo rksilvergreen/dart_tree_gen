@@ -130,8 +130,6 @@ class StandaloneTreeGenerator {
         return 'DoubleValueNode';
       case SchemaType.boolean:
         return 'BoolValueNode';
-      case SchemaType.typeParameter:
-        return '${property.typeParameterName}Node';
       case SchemaType.object:
         return '${property.referencedSchema!.title}Node';
       case SchemaType.array:

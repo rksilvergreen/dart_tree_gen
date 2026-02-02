@@ -505,9 +505,6 @@ class TreeNodeClassGenerator {
       // Only generate setters for non-value types
       if (_isValueType(property.type)) continue;
 
-      // Skip type parameters - they have different bounds (TreeNode vs TreeObject)
-      if (property.type == SchemaType.typeParameter) continue;
-
       final objectType = _getObjectType(property);
       final nullMark = property.nullable ? '?' : '';
       final escapedName = _escapePropertyName(property.name);
@@ -604,19 +601,11 @@ class TreeNodeClassGenerator {
           return '$propAccess?.toObject()';
         }
         return '$propAccess.toObject()';
-      case SchemaType.typeParameter:
-        // Type parameter nodes - call toObject() (returns TreeObject)
-        if (property.nullable) {
-          return '$propAccess?.toObject()';
-        }
-        return '$propAccess.toObject()';
       case SchemaType.object:
         // Object nodes - call toObject()
-        final hasTypeParamArgs =
-            property.typeArguments?.values.any((arg) => arg.type == SchemaType.typeParameter) ?? false;
+        // All type arguments are now concrete types (type parameters are union-only)
         final isUnion = property.referencedSchema?.isUnion == true;
-        final hasConcreteTypeArgs =
-            property.typeArguments != null && property.typeArguments!.isNotEmpty && !hasTypeParamArgs;
+        final hasConcreteTypeArgs = property.typeArguments != null && property.typeArguments!.isNotEmpty;
 
         // Add cast if it's a union or has concrete type arguments
         if (isUnion || hasConcreteTypeArgs) {
@@ -665,26 +654,14 @@ class TreeNodeClassGenerator {
     for (final property in schema.properties.values) {
       final escapedName = _escapePropertyName(property.name);
 
-      if (property.type == SchemaType.typeParameter) {
-        // Type parameters use tree.fromObject with parent and key
-        buffer.writeln('    if (object.${property.name} != null) {');
-        buffer.writeln('      final tempTree = Tree(root: object.${property.name}!);');
-        buffer.writeln('      final rootNode = tempTree.root;');
-        buffer.writeln('      if (rootNode != null) {');
-        buffer.writeln('        final subtree = tempTree.removeSubtree(rootNode);');
-        buffer.writeln('        tree.addSubtree(parent: node, key: \'$escapedName\', subtree: subtree);');
-        buffer.writeln('      }');
-        buffer.writeln('    }');
+      // For unions and objects, use the base node type without type arguments for fromObject call
+      String nodeTypeForFromObject;
+      if (property.type == SchemaType.object && property.referencedSchema != null) {
+        nodeTypeForFromObject = '${property.referencedSchema!.title}Node';
       } else {
-        // For unions and objects, use the base node type without type arguments for fromObject call
-        String nodeTypeForFromObject;
-        if (property.type == SchemaType.object && property.referencedSchema != null) {
-          nodeTypeForFromObject = '${property.referencedSchema!.title}Node';
-        } else {
-          nodeTypeForFromObject = _getNodeType(property);
-        }
-        buffer.writeln('    $nodeTypeForFromObject.fromObject(tree, node, \'$escapedName\', object.${property.name});');
+        nodeTypeForFromObject = _getNodeType(property);
       }
+      buffer.writeln('    $nodeTypeForFromObject.fromObject(tree, node, \'$escapedName\', object.${property.name});');
     }
 
     buffer.writeln('  }');
@@ -707,9 +684,6 @@ class TreeNodeClassGenerator {
         return 'DoubleValueNode';
       case SchemaType.boolean:
         return 'BoolValueNode';
-      case SchemaType.typeParameter:
-        // Type parameter - use TreeNode as the base type
-        return 'TreeNode';
       case SchemaType.object:
         final baseType = '${property.referencedSchema!.title}Node';
         if (property.typeArguments != null && property.typeArguments!.isNotEmpty) {
@@ -747,19 +721,12 @@ class TreeNodeClassGenerator {
         return 'DoubleValue';
       case SchemaType.boolean:
         return 'BoolValue';
-      case SchemaType.typeParameter:
-        // Type parameter - use the type parameter name directly (no Object suffix)
-        return property.typeParameterName!;
       case SchemaType.object:
         final baseType = '${property.referencedSchema!.title}Object';
-        // Include type arguments only if they're all concrete types (not type parameters)
+        // All type arguments are concrete types now (type parameters are union-only)
         if (property.typeArguments != null && property.typeArguments!.isNotEmpty) {
-          final hasTypeParams = property.typeArguments!.values.any((arg) => arg.type == SchemaType.typeParameter);
-          if (!hasTypeParams) {
-            // All concrete types, safe to include
-            final typeArgs = property.typeArguments!.values.map((argProp) => _getObjectType(argProp)).join(', ');
-            return '$baseType<$typeArgs>';
-          }
+          final typeArgs = property.typeArguments!.values.map((argProp) => _getObjectType(argProp)).join(', ');
+          return '$baseType<$typeArgs>';
         }
         return baseType;
       case SchemaType.array:

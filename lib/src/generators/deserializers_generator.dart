@@ -21,10 +21,11 @@ class DeserializersGenerator {
     // Types with type parameters can't be in the generic fromJson/fromYaml since they need deserializer args
     final allTypesByDartType = <String, SchemaInfo>{};
     for (final schema in schemas) {
-      if (!schema.isUnion && schema.typeParameters.isEmpty) {
+      if (!schema.isUnion) {
+        // Regular schemas never have type parameters
         final dartType = _getDartType(schema);
         allTypesByDartType[dartType] = schema;
-      } else if (schema.isUnion && schema.unionInfo!.typeParameters.isEmpty) {
+      } else if (schema.unionInfo!.typeParameters.isEmpty) {
         // Only add unions without type parameters
         final dartType = _getDartType(schema);
         allTypesByDartType[dartType] = schema;

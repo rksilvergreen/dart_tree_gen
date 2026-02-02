@@ -165,19 +165,6 @@ class StandaloneSchemaAnalyzer {
       throw Exception('\$Schema must have a non-empty name parameter');
     }
 
-    // Extract type parameters
-    final typeParamsField = value.getField('typeParameters');
-    final typeParameters = <String>{};
-    if (typeParamsField != null && !typeParamsField.isNull) {
-      final paramsSet = typeParamsField.toSetValue();
-      if (paramsSet != null) {
-        for (final param in paramsSet) {
-          final paramStr = param.toStringValue();
-          if (paramStr != null) typeParameters.add(paramStr);
-        }
-      }
-    }
-
     // Extract required list
     final requiredField = value.getField('required');
     final required = <String>[];
@@ -233,7 +220,7 @@ class StandaloneSchemaAnalyzer {
           final propertyInfo = await _analyzeProperty(
             propertyName,
             propertyValue,
-            typeParameters,
+            const {}, // Regular schemas don't have type parameters
             isRequired: required.contains(propertyName),
           );
 
@@ -246,7 +233,6 @@ class StandaloneSchemaAnalyzer {
       name: name,
       title: name,
       isAnnotated: true,
-      typeParameters: typeParameters,
       properties: properties,
       required: required,
       allowed: allowed.isNotEmpty ? allowed : null,
@@ -323,14 +309,7 @@ class StandaloneSchemaAnalyzer {
 
     final unionInfo = UnionInfo(title: name, types: unionTypes, typeParameters: typeParameters);
 
-    final schemaInfo = SchemaInfo(
-      name: name,
-      title: name,
-      isAnnotated: true,
-      typeParameters: typeParameters,
-      properties: {},
-      unionInfo: unionInfo,
-    );
+    final schemaInfo = SchemaInfo(name: name, title: name, isAnnotated: true, properties: {}, unionInfo: unionInfo);
 
     _schemas[name] = schemaInfo;
     _objectToSchema[value.hashCode] = schemaInfo;
@@ -358,29 +337,6 @@ class StandaloneSchemaAnalyzer {
 
       case '\$Boolean':
         return PropertyInfo(name: propertyName, type: SchemaType.boolean, nullable: !isRequired);
-
-      case '\$TypeParameter':
-        final paramNameField = value.getField('name');
-        final paramName = paramNameField?.toStringValue();
-
-        if (paramName == null) {
-          throw Exception('$TypeParameter must have a name');
-        }
-
-        // Validate that this type parameter is defined in the schema
-        if (!schemaTypeParameters.contains(paramName)) {
-          throw Exception(
-            'Property "$propertyName" references type parameter "$paramName" '
-            'which is not defined in the schema. Available type parameters: $schemaTypeParameters',
-          );
-        }
-
-        return PropertyInfo(
-          name: propertyName,
-          type: SchemaType.typeParameter,
-          nullable: !isRequired,
-          typeParameterName: paramName,
-        );
 
       case '\$Array':
         final uniqueItemsField = value.getField('uniqueItems');
@@ -430,12 +386,13 @@ class StandaloneSchemaAnalyzer {
 
               if (key == null || argValue == null) continue;
 
-              // Validate this type param exists in the referenced schema
-              if (!refSchema.typeParameters.contains(key)) {
+              // Validate this type param exists in the referenced schema (only unions have type parameters)
+              if (!refSchema.isUnion || !refSchema.unionInfo!.typeParameters.contains(key)) {
+                final availableParams = refSchema.isUnion ? refSchema.unionInfo!.typeParameters : <String>{};
                 throw Exception(
                   'Property "$propertyName" provides type argument "$key" '
                   'but schema "${refSchema.title}" does not define this type parameter. '
-                  'Available type parameters: ${refSchema.typeParameters}',
+                  'Available type parameters: $availableParams',
                 );
               }
 
@@ -446,14 +403,16 @@ class StandaloneSchemaAnalyzer {
           }
         }
 
-        // Validate all required type parameters are provided
-        for (final requiredParam in refSchema.typeParameters) {
-          if (typeArguments == null || !typeArguments.containsKey(requiredParam)) {
-            throw Exception(
-              'Property "$propertyName" references schema "${refSchema.title}" '
-              'but does not provide required type parameter "$requiredParam". '
-              'Required type parameters: ${refSchema.typeParameters}',
-            );
+        // Validate all required type parameters are provided (only unions have type parameters)
+        if (refSchema.isUnion) {
+          for (final requiredParam in refSchema.unionInfo!.typeParameters) {
+            if (typeArguments == null || !typeArguments.containsKey(requiredParam)) {
+              throw Exception(
+                'Property "$propertyName" references schema "${refSchema.title}" '
+                'but does not provide required type parameter "$requiredParam". '
+                'Required type parameters: ${refSchema.unionInfo!.typeParameters}',
+              );
+            }
           }
         }
 

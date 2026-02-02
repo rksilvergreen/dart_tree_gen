@@ -20,15 +20,11 @@ class StandaloneTreeObjectGenerator {
     // Imports
     buffer.writeln("import 'package:dart_tree/dart_tree.dart';");
 
-    // For union schemas, schemas with type parameters, or schemas with typeArguments in properties, import the deserializers file
-    final hasTypeParameterProperty = schema.properties.values.any((p) => p.type == SchemaType.typeParameter);
+    // For union schemas or schemas with typeArguments in properties, import the deserializers file
     final hasTypeArgumentsInProperties = schema.properties.values.any(
       (p) => p.typeArguments != null && p.typeArguments!.isNotEmpty,
     );
-    if (schema.isUnion ||
-        schema.typeParameters.isNotEmpty ||
-        hasTypeParameterProperty ||
-        hasTypeArgumentsInProperties) {
+    if (schema.isUnion || hasTypeArgumentsInProperties) {
       buffer.writeln("import '../${sourceBaseName}_deserializers.dart';");
     }
 
@@ -42,6 +38,13 @@ class StandaloneTreeObjectGenerator {
       if (property.type == SchemaType.object && property.referencedSchema != null) {
         final refTitle = property.referencedSchema!.title;
         importedObjects.add(refTitle);
+        // Import type argument types (e.g. AdminObject for RefObject<AdminObject>)
+        if (property.typeArguments != null) {
+          for (final argProp in property.typeArguments!.values) {
+            final argType = _getObjectTitleForProperty(argProp);
+            if (argType != null) importedObjects.add(argType);
+          }
+        }
       }
       if (property.type == SchemaType.union && property.referencedSchema != null) {
         final refTitle = property.referencedSchema!.title;
@@ -102,5 +105,14 @@ class StandaloneTreeObjectGenerator {
     return input
         .replaceAllMapped(RegExp(r'[A-Z]'), (m) => '_${m.group(0)!.toLowerCase()}')
         .replaceFirst(RegExp(r'^_'), '');
+  }
+
+  /// Returns the schema title for import if this property references an object type.
+  /// Returns null for primitives (String, Integer, etc.) which come from dart_tree.
+  String? _getObjectTitleForProperty(PropertyInfo property) {
+    if (property.type == SchemaType.object && property.referencedSchema != null) {
+      return property.referencedSchema!.title;
+    }
+    return null;
   }
 }
