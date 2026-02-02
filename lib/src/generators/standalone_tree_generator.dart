@@ -26,6 +26,28 @@ class StandaloneTreeGenerator {
     return title[0].toLowerCase() + title.substring(1);
   }
 
+  /// Converts a type parameter name to camelCase for use as property/field name.
+  /// E.g. "GORDON_BANKS" -> "gordonBanks", "U" -> "u".
+  String _typeParamToCamelCase(String typeParam) {
+    if (typeParam.isEmpty) return typeParam;
+    final parts = typeParam.split('_');
+    if (parts.length == 1) {
+      return typeParam[0].toLowerCase() + typeParam.substring(1);
+    }
+    final result = StringBuffer();
+    for (var i = 0; i < parts.length; i++) {
+      final part = parts[i];
+      if (part.isEmpty) continue;
+      if (i == 0) {
+        result.write(part.toLowerCase());
+      } else {
+        result.write(part[0].toUpperCase());
+        if (part.length > 1) result.write(part.substring(1).toLowerCase());
+      }
+    }
+    return result.toString();
+  }
+
   String generate() {
     final buffer = StringBuffer();
 
@@ -91,7 +113,7 @@ class StandaloneTreeGenerator {
 
       // Handle type parameters if any
       for (final typeParam in unionInfo.typeParameters) {
-        final fieldName = typeParam[0].toLowerCase() + typeParam.substring(1);
+        final fieldName = _typeParamToCamelCase(typeParam);
         final capitalizedName = fieldName[0].toUpperCase() + fieldName.substring(1);
         buffer.writeln('      else if (object.is$capitalizedName) { fromObject(object.as$capitalizedName!); return; }');
       }

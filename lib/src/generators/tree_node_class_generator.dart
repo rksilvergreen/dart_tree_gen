@@ -70,9 +70,26 @@ class TreeNodeClassGenerator {
     return buffer.toString();
   }
 
-  /// Gets a field name from a type parameter name (lowercase first letter).
+  /// Converts a type parameter name to camelCase for use as property/field name.
+  /// E.g. "GORDON_BANKS" -> "gordonBanks", "U" -> "u".
   String _typeParamToFieldName(String typeParam) {
-    return typeParam[0].toLowerCase() + typeParam.substring(1);
+    if (typeParam.isEmpty) return typeParam;
+    final parts = typeParam.split('_');
+    if (parts.length == 1) {
+      return typeParam[0].toLowerCase() + typeParam.substring(1);
+    }
+    final result = StringBuffer();
+    for (var i = 0; i < parts.length; i++) {
+      final part = parts[i];
+      if (part.isEmpty) continue;
+      if (i == 0) {
+        result.write(part.toLowerCase());
+      } else {
+        result.write(part[0].toUpperCase());
+        if (part.length > 1) result.write(part.substring(1).toLowerCase());
+      }
+    }
+    return result.toString();
   }
 
   /// Generates a concrete union node class.
@@ -328,9 +345,15 @@ class TreeNodeClassGenerator {
 
   /// Generates fromObject method for union nodes.
   void _generateUnionFromObject(StringBuffer buffer, List<SchemaInfo> types, Set<String> typeParams) {
-    buffer.writeln(
-      '  static void fromObject(Tree tree, TreeNode? parent, String key, ${schema.title}Object? object) {',
-    );
+    buffer.write('  static void fromObject(Tree tree, TreeNode? parent, String key, ${schema.title}Object? object');
+    if (typeParams.isNotEmpty) {
+      for (final typeParam in typeParams) {
+        buffer.write(
+          ', void Function(Tree tree, TreeNode? parent, String key, TreeObject object) deserializer_$typeParam',
+        );
+      }
+    }
+    buffer.writeln(') {');
     buffer.writeln('    if (object == null) return;');
     buffer.writeln();
 
@@ -349,13 +372,13 @@ class TreeNodeClassGenerator {
       buffer.writeln('      $nodeType.fromObject(tree, parent, key, object.as$capitalizedName);');
     }
 
-    // Handle type parameters
+    // Handle type parameters - use deserializer passed by parent
     for (final typeParam in typeParams) {
       final fieldName = _typeParamToFieldName(typeParam);
       final capitalizedName = fieldName[0].toUpperCase() + fieldName.substring(1);
 
       buffer.writeln('    } else if (object.is$capitalizedName) {');
-      buffer.writeln('      tree.fromObject(object.as$capitalizedName!);');
+      buffer.writeln('      deserializer_$typeParam(tree, parent, key, object.as$capitalizedName!);');
     }
 
     buffer.writeln('    }');
@@ -669,7 +692,27 @@ class TreeNodeClassGenerator {
       } else {
         nodeTypeForFromObject = _getNodeType(property);
       }
-      buffer.writeln('    $nodeTypeForFromObject.fromObject(tree, node, \'$escapedName\', object.${property.name});');
+
+      final isUnionWithTypeArgs =
+          property.referencedSchema?.isUnion == true &&
+          property.referencedSchema!.unionInfo!.typeParameters.isNotEmpty &&
+          property.typeArguments != null;
+
+      if (isUnionWithTypeArgs) {
+        final deserializerArgs = property.referencedSchema!.unionInfo!.typeParameters
+            .map((tp) {
+              final argProp = property.typeArguments![tp]!;
+              final nodeType = _getNodeType(argProp);
+              final objectType = _getObjectType(argProp);
+              return '(Tree t, TreeNode? p, String k, TreeObject o) => $nodeType.fromObject(t, p, k, o as $objectType)';
+            })
+            .join(', ');
+        buffer.writeln(
+          '    $nodeTypeForFromObject.fromObject(tree, node, \'$escapedName\', object.${property.name}, $deserializerArgs);',
+        );
+      } else {
+        buffer.writeln('    $nodeTypeForFromObject.fromObject(tree, node, \'$escapedName\', object.${property.name});');
+      }
     }
 
     buffer.writeln('  }');

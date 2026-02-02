@@ -82,9 +82,26 @@ class TreeObjectClassGenerator {
     return buffer.toString();
   }
 
-  /// Gets a field name from a type parameter name (lowercase first letter).
+  /// Converts a type parameter name to camelCase for use as property/field name.
+  /// E.g. "GORDON_BANKS" -> "gordonBanks", "U" -> "u".
   String _typeParamToFieldName(String typeParam) {
-    return typeParam[0].toLowerCase() + typeParam.substring(1);
+    if (typeParam.isEmpty) return typeParam;
+    final parts = typeParam.split('_');
+    if (parts.length == 1) {
+      return typeParam[0].toLowerCase() + typeParam.substring(1);
+    }
+    final result = StringBuffer();
+    for (var i = 0; i < parts.length; i++) {
+      final part = parts[i];
+      if (part.isEmpty) continue;
+      if (i == 0) {
+        result.write(part.toLowerCase());
+      } else {
+        result.write(part[0].toUpperCase());
+        if (part.length > 1) result.write(part.substring(1).toLowerCase());
+      }
+    }
+    return result.toString();
   }
 
   /// Generates a concrete union class.
