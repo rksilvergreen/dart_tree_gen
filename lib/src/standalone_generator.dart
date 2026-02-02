@@ -10,7 +10,6 @@ import 'generators/standalone_tree_object_generator.dart';
 import 'generators/standalone_tree_node_generator.dart';
 import 'generators/standalone_tree_generator.dart';
 import 'generators/barrel_file_generator.dart';
-import 'generators/deserializers_generator.dart';
 
 /// Result of generation process.
 class GenerationResult {
@@ -235,16 +234,6 @@ class StandaloneGenerator {
     final treeCode = treeGenerator.generate();
 
     await File(treePath).writeAsString(treeCode);
-    filesGenerated++;
-
-    // Generate deserializers file
-    final deserializersFileName = '${inputBaseName}_deserializers.dart';
-    final deserializersPath = p.join(outputBaseDir, deserializersFileName);
-
-    final deserializersGenerator = DeserializersGenerator(schemas: schemas, sourceFileName: '$inputBaseName.dart');
-    final deserializersCode = deserializersGenerator.generate();
-
-    await File(deserializersPath).writeAsString(deserializersCode);
     filesGenerated++;
 
     // Generate barrel file

@@ -6,11 +6,7 @@ class BarrelFileGenerator {
   final String sourceBaseName;
   final List<String> listClasses;
 
-  BarrelFileGenerator(
-    this.schemas,
-    this.sourceBaseName,
-    this.listClasses,
-  );
+  BarrelFileGenerator(this.schemas, this.sourceBaseName, this.listClasses);
 
   String generate() {
     final buffer = StringBuffer();
@@ -28,7 +24,7 @@ class BarrelFileGenerator {
       final fileName = _toSnakeCase(schema.title) + '_object.dart';
       buffer.writeln("export '$sourceBaseName/objects/$fileName';");
     }
-    
+
     // Export custom ListObject files
     if (listClasses.isNotEmpty) {
       buffer.writeln();
@@ -37,7 +33,7 @@ class BarrelFileGenerator {
         buffer.writeln("export '$sourceBaseName/objects/$listClass.dart';");
       }
     }
-    
+
     buffer.writeln();
 
     // Export TreeNode files
@@ -46,18 +42,12 @@ class BarrelFileGenerator {
       final fileName = _toSnakeCase(schema.title) + '_node.dart';
       buffer.writeln("export '$sourceBaseName/nodes/$fileName';");
     }
-    
+
     buffer.writeln();
 
     // Export Tree file
     buffer.writeln('// Tree export');
     buffer.writeln("export '$sourceBaseName/trees/${sourceBaseName}_tree.dart';");
-    
-    buffer.writeln();
-
-    // Export deserializers file
-    buffer.writeln('// Deserializers export');
-    buffer.writeln("export '$sourceBaseName/${sourceBaseName}_deserializers.dart';");
 
     return buffer.toString();
   }
@@ -68,4 +58,3 @@ class BarrelFileGenerator {
         .replaceFirst(RegExp(r'^_'), '');
   }
 }
-

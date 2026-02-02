@@ -275,7 +275,7 @@ class TreeObjectClassGenerator {
     buffer.write('(String json');
     if (typeParams.isNotEmpty) {
       for (final typeParam in typeParams) {
-        buffer.write(', Deserializer<$typeParam> deserializer_$typeParam');
+        buffer.write(', TextParser<$typeParam> textParser_$typeParam');
       }
     }
     buffer.writeln(') {');
@@ -298,7 +298,7 @@ class TreeObjectClassGenerator {
 
       if (attemptIndex > 0) buffer.writeln('    } catch (_) {');
       buffer.writeln('    try {');
-      buffer.writeln('      return ${schema.title}Object.$fieldName(deserializer_$typeParam(json));');
+      buffer.writeln('      return ${schema.title}Object.$fieldName(textParser_$typeParam(json));');
       attemptIndex++;
     }
 
@@ -328,7 +328,7 @@ class TreeObjectClassGenerator {
     buffer.write('(String yaml');
     if (typeParams.isNotEmpty) {
       for (final typeParam in typeParams) {
-        buffer.write(', Deserializer<$typeParam> deserializer_$typeParam');
+        buffer.write(', TextParser<$typeParam> textParser_$typeParam');
       }
     }
     buffer.writeln(') {');
@@ -351,7 +351,7 @@ class TreeObjectClassGenerator {
 
       if (attemptIndex > 0) buffer.writeln('    } catch (_) {');
       buffer.writeln('    try {');
-      buffer.writeln('      return ${schema.title}Object.$fieldName(deserializer_$typeParam(yaml));');
+      buffer.writeln('      return ${schema.title}Object.$fieldName(textParser_$typeParam(yaml));');
       attemptIndex++;
     }
 
@@ -646,7 +646,7 @@ class TreeObjectClassGenerator {
     buffer.write('(String json');
     if (typeParams.isNotEmpty) {
       for (final typeParam in typeParams) {
-        buffer.write(', Deserializer<$typeParam> deserializer_$typeParam');
+        buffer.write(', TextParser<$typeParam> textParser_$typeParam');
       }
     }
     buffer.writeln(') {');
@@ -723,7 +723,7 @@ class TreeObjectClassGenerator {
     buffer.write('(String yaml');
     if (typeParams.isNotEmpty) {
       for (final typeParam in typeParams) {
-        buffer.write(', Deserializer<$typeParam> deserializer_$typeParam');
+        buffer.write(', TextParser<$typeParam> textParser_$typeParam');
       }
     }
     buffer.writeln(') {');
