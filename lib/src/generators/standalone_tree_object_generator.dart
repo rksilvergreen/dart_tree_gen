@@ -93,6 +93,18 @@ class StandaloneTreeObjectGenerator {
               buffer.writeln('/// Generated ListObject for ${schema.title}');
               buffer.writeln('class $className extends ListObject<${schema.title}Object> {');
               buffer.writeln('  $className(super.elements);');
+              buffer.writeln();
+              buffer.writeln('  static $className fromJson(String json) => $className(');
+              buffer.writeln(
+                '    extractJsonArrayElements(json).map((item) => ${schema.title}Object.fromJson(item)).toList(),',
+              );
+              buffer.writeln('  );');
+              buffer.writeln();
+              buffer.writeln('  static $className fromYaml(String yaml) => $className(');
+              buffer.writeln(
+                '    extractYamlSequenceElements(yaml).map((item) => ${schema.title}Object.fromYaml(item)).toList(),',
+              );
+              buffer.writeln('  );');
               buffer.writeln('}');
             }
           }

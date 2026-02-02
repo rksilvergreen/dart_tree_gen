@@ -812,9 +812,8 @@ class TreeObjectClassGenerator {
         return '$baseType.fromJson($varName as String)';
       case SchemaType.array:
         if (property.referencedSchema != null) {
-          final itemType = property.referencedSchema!.title;
-          final listClass = _getListClassName(itemType, property.uniqueItems);
-          return '$listClass(extractJsonArrayElements($varName as String).map((item) => ${itemType}Object.fromJson(item)).toList())';
+          final listClass = _getListClassName(property.referencedSchema!.title, property.uniqueItems);
+          return '$listClass.fromJson($varName as String)';
         }
         return 'ListObject(extractJsonArrayElements($varName as String).map((item) => TreeObject.fromJson(item)).toList())';
       case SchemaType.union:
@@ -849,9 +848,8 @@ class TreeObjectClassGenerator {
         return '$baseType.fromYaml($varName as String)';
       case SchemaType.array:
         if (property.referencedSchema != null) {
-          final itemType = property.referencedSchema!.title;
-          final listClass = _getListClassName(itemType, property.uniqueItems);
-          return '$listClass(extractYamlSequenceElements($varName as String).map((item) => ${itemType}Object.fromYaml(item)).toList())';
+          final listClass = _getListClassName(property.referencedSchema!.title, property.uniqueItems);
+          return '$listClass.fromYaml($varName as String)';
         }
         return 'ListObject(extractYamlSequenceElements($varName as String).map((item) => TreeObject.fromYaml(item)).toList())';
       case SchemaType.union:
@@ -872,11 +870,9 @@ class TreeObjectClassGenerator {
   /// Returns a deserializer lambda for a type argument (used when passing to union fromJson/fromYaml).
   String _getDeserializerLambda(PropertyInfo argProp, {required bool isJson}) {
     if (argProp.type == SchemaType.array && argProp.referencedSchema != null) {
-      final itemType = argProp.referencedSchema!.title;
-      final listClass = _getListClassName(itemType, argProp.uniqueItems);
-      final extract = isJson ? 'extractJsonArrayElements' : 'extractYamlSequenceElements';
+      final listClass = _getListClassName(argProp.referencedSchema!.title, argProp.uniqueItems);
       final fromMethod = isJson ? 'fromJson' : 'fromYaml';
-      return '(String s) => $listClass($extract(s).map((item) => ${itemType}Object.$fromMethod(item)).toList())';
+      return '(String s) => $listClass.$fromMethod(s)';
     }
     final concreteType = _getDartType(argProp);
     final fromMethod = isJson ? 'fromJson' : 'fromYaml';
