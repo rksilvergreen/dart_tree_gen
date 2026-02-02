@@ -804,12 +804,8 @@ class TreeObjectClassGenerator {
         final baseType = '${property.referencedSchema!.title}Object';
         if (property.typeArguments != null && property.typeArguments!.isNotEmpty) {
           final typeArgs = property.typeArguments!.values.map((argProp) => _getDartType(argProp)).join(', ');
-          // All type arguments are concrete types (type parameters are union-only now)
           final deserializerArgs = property.typeArguments!.values
-              .map((argProp) {
-                final concreteType = _getDartType(argProp);
-                return '(String s) => $concreteType.fromJson(s)';
-              })
+              .map((argProp) => _getDeserializerLambda(argProp, isJson: true))
               .join(', ');
           return '$baseType.fromJson<$typeArgs>($varName as String, $deserializerArgs)';
         }
@@ -817,7 +813,7 @@ class TreeObjectClassGenerator {
       case SchemaType.array:
         if (property.referencedSchema != null) {
           final itemType = property.referencedSchema!.title;
-          final listClass = '${property.name.capitalize()}ListObject';
+          final listClass = _getListClassName(itemType, property.uniqueItems);
           return '$listClass(extractJsonArrayElements($varName as String).map((item) => ${itemType}Object.fromJson(item)).toList())';
         }
         return 'ListObject(extractJsonArrayElements($varName as String).map((item) => TreeObject.fromJson(item)).toList())';
@@ -845,12 +841,8 @@ class TreeObjectClassGenerator {
         final baseType = '${property.referencedSchema!.title}Object';
         if (property.typeArguments != null && property.typeArguments!.isNotEmpty) {
           final typeArgs = property.typeArguments!.values.map((argProp) => _getDartType(argProp)).join(', ');
-          // All type arguments are concrete types (type parameters are union-only now)
           final deserializerArgs = property.typeArguments!.values
-              .map((argProp) {
-                final concreteType = _getDartType(argProp);
-                return '(String s) => $concreteType.fromYaml(s)';
-              })
+              .map((argProp) => _getDeserializerLambda(argProp, isJson: false))
               .join(', ');
           return '$baseType.fromYaml<$typeArgs>($varName as String, $deserializerArgs)';
         }
@@ -858,7 +850,7 @@ class TreeObjectClassGenerator {
       case SchemaType.array:
         if (property.referencedSchema != null) {
           final itemType = property.referencedSchema!.title;
-          final listClass = '${property.name.capitalize()}ListObject';
+          final listClass = _getListClassName(itemType, property.uniqueItems);
           return '$listClass(extractYamlSequenceElements($varName as String).map((item) => ${itemType}Object.fromYaml(item)).toList())';
         }
         return 'ListObject(extractYamlSequenceElements($varName as String).map((item) => TreeObject.fromYaml(item)).toList())';
@@ -869,6 +861,26 @@ class TreeObjectClassGenerator {
         }
         return 'StringOrIntObject.fromYaml($varName as String)';
     }
+  }
+
+  /// Returns list class name by item schema (e.g. ReferencesListObject for Reference).
+  String _getListClassName(String itemSchemaTitle, bool uniqueItems) {
+    final plural = '${itemSchemaTitle}s';
+    return uniqueItems ? '${plural}SetObject' : '${plural}ListObject';
+  }
+
+  /// Returns a deserializer lambda for a type argument (used when passing to union fromJson/fromYaml).
+  String _getDeserializerLambda(PropertyInfo argProp, {required bool isJson}) {
+    if (argProp.type == SchemaType.array && argProp.referencedSchema != null) {
+      final itemType = argProp.referencedSchema!.title;
+      final listClass = _getListClassName(itemType, argProp.uniqueItems);
+      final extract = isJson ? 'extractJsonArrayElements' : 'extractYamlSequenceElements';
+      final fromMethod = isJson ? 'fromJson' : 'fromYaml';
+      return '(String s) => $listClass($extract(s).map((item) => ${itemType}Object.$fromMethod(item)).toList())';
+    }
+    final concreteType = _getDartType(argProp);
+    final fromMethod = isJson ? 'fromJson' : 'fromYaml';
+    return '(String s) => $concreteType.$fromMethod(s)';
   }
 
   /// Gets the Dart type name for a property.
@@ -891,9 +903,7 @@ class TreeObjectClassGenerator {
         return baseType;
       case SchemaType.array:
         if (property.referencedSchema != null) {
-          // Use Set or List based on uniqueItems
-          final collectionType = property.uniqueItems ? 'Set' : 'List';
-          return '${property.name.capitalize()}${collectionType}Object';
+          return _getListClassName(property.referencedSchema!.title, property.uniqueItems);
         }
         return property.uniqueItems ? 'SetObject<TreeObject>' : 'ListObject<TreeObject>';
       case SchemaType.union:

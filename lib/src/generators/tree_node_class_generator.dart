@@ -693,12 +693,8 @@ class TreeNodeClassGenerator {
         return baseType;
       case SchemaType.array:
         if (property.referencedSchema != null) {
-          final capitalizedName = property.name.isEmpty
-              ? property.name
-              : property.name[0].toUpperCase() + property.name.substring(1);
-          // Use Set or List based on uniqueItems
-          final collectionType = property.uniqueItems ? 'Set' : 'List';
-          return '${capitalizedName}${collectionType}Node';
+          final listClass = _getListClassName(property.referencedSchema!.title, property.uniqueItems);
+          return listClass.replaceFirst('ListObject', 'ListNode').replaceFirst('SetObject', 'SetNode');
         }
         return property.uniqueItems ? 'SetTreeNode' : 'ListTreeNode';
       case SchemaType.union:
@@ -731,12 +727,7 @@ class TreeNodeClassGenerator {
         return baseType;
       case SchemaType.array:
         if (property.referencedSchema != null) {
-          final capitalizedName = property.name.isEmpty
-              ? property.name
-              : property.name[0].toUpperCase() + property.name.substring(1);
-          // Use Set or List based on uniqueItems
-          final collectionType = property.uniqueItems ? 'Set' : 'List';
-          return '${capitalizedName}${collectionType}Object';
+          return _getListClassName(property.referencedSchema!.title, property.uniqueItems);
         }
         return property.uniqueItems ? 'SetObject<TreeObject>' : 'ListObject<TreeObject>';
       case SchemaType.union:
@@ -745,6 +736,11 @@ class TreeNodeClassGenerator {
         }
         return 'UnionObject2<TreeObject, TreeObject>';
     }
+  }
+
+  String _getListClassName(String itemSchemaTitle, bool uniqueItems) {
+    final plural = '${itemSchemaTitle}s';
+    return uniqueItems ? '${plural}SetObject' : '${plural}ListObject';
   }
 
   /// Gets the Dart value type (String, int, etc.) for a property.

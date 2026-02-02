@@ -80,20 +80,36 @@ class StandaloneTreeObjectGenerator {
   }
 
   /// Generates ListObject classes that reference this schema as their item type.
+  /// Named by item schema (e.g. ReferencesListObject for Reference), not by property name.
   void _generateListMapObjects(StringBuffer buffer) {
-    // Find all properties in all schemas that reference this schema as an array item
+    final generated = <String>{};
     for (final otherSchema in allSchemas) {
       for (final property in otherSchema.properties.values) {
-        if (property.referencedSchema?.title == schema.title && property.type == SchemaType.array) {
-          final className = '${_capitalize(property.name)}ListObject';
-          buffer.writeln();
-          buffer.writeln('/// Generated ListObject for ${property.name}');
-          buffer.writeln('class $className extends ListObject<${schema.title}Object> {');
-          buffer.writeln('  $className(super.elements);');
-          buffer.writeln('}');
+        void checkProperty(PropertyInfo p) {
+          if (p.referencedSchema?.title == schema.title && p.type == SchemaType.array) {
+            final className = _getListClassName(schema.title, p.uniqueItems);
+            if (generated.add(className)) {
+              buffer.writeln();
+              buffer.writeln('/// Generated ListObject for ${schema.title}');
+              buffer.writeln('class $className extends ListObject<${schema.title}Object> {');
+              buffer.writeln('  $className(super.elements);');
+              buffer.writeln('}');
+            }
+          }
+          for (final arg in p.typeArguments?.values ?? []) {
+            checkProperty(arg);
+          }
         }
+
+        checkProperty(property);
       }
     }
+  }
+
+  /// Returns list class name by item schema (e.g. ReferencesListObject for Reference).
+  String _getListClassName(String itemSchemaTitle, bool uniqueItems) {
+    final plural = '${itemSchemaTitle}s';
+    return uniqueItems ? '${plural}SetObject' : '${plural}ListObject';
   }
 
   String _capitalize(String input) {
