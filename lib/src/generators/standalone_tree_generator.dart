@@ -78,7 +78,7 @@ class StandaloneTreeGenerator {
     buffer.writeln('  $className({required super.root});');
     buffer.writeln();
     buffer.writeln('  @override');
-    buffer.writeln('  void fromObject<T extends TreeObject>(TreeObject object) {');
+    buffer.writeln('  void fromObject(Object object) {');
 
     // Handle value objects
     buffer.writeln('    // Handle value objects');

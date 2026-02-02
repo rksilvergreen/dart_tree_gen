@@ -125,7 +125,7 @@ class TreeObjectClassGenerator {
       buffer.write(typeParams.map((t) => '$t extends TreeObject').join(', '));
       buffer.write('>');
     }
-    buffer.writeln(' extends TreeObject {');
+    buffer.writeln(' {');
 
     // Generate nullable fields for concrete types
     for (final type in types) {
@@ -229,7 +229,6 @@ class TreeObjectClassGenerator {
     }
 
     // Generate toJson
-    buffer.writeln('  @override');
     buffer.writeln('  String toJson() {');
     for (final type in types) {
       final constructorName = _getConstructorName(type);
@@ -244,7 +243,6 @@ class TreeObjectClassGenerator {
     buffer.writeln();
 
     // Generate toYaml
-    buffer.writeln('  @override');
     buffer.writeln('  String toYaml() {');
     for (final type in types) {
       final constructorName = _getConstructorName(type);
@@ -365,7 +363,6 @@ class TreeObjectClassGenerator {
     buffer.writeln();
 
     // Generate toString
-    buffer.writeln('  @override');
     buffer.write('  String toString() => \'${schema.title}Object(');
     for (int i = 0; i < types.length; i++) {
       final constructorName = _getConstructorName(types[i]);
@@ -381,7 +378,6 @@ class TreeObjectClassGenerator {
     buffer.writeln();
 
     // Generate operator==
-    buffer.writeln('  @override');
     buffer.writeln('  bool operator ==(Object other) =>');
     buffer.writeln('      identical(this, other) ||');
     buffer.write('      other is ${schema.title}Object');
@@ -410,7 +406,6 @@ class TreeObjectClassGenerator {
     buffer.writeln();
 
     // Generate hashCode
-    buffer.writeln('  @override');
     buffer.write('  int get hashCode => Object.hash(');
     final allFields = [
       ...types.map((t) => '_${_getConstructorName(t)}'),

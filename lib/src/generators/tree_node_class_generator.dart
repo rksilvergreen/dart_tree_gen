@@ -113,7 +113,7 @@ class TreeNodeClassGenerator {
       buffer.write(typeParams.map((t) => '$t extends TreeNode').join(', '));
       buffer.write('>');
     }
-    buffer.writeln(' extends TreeNode {');
+    buffer.writeln(' {');
 
     // Generate nullable fields for concrete types
     for (final type in types) {
@@ -134,7 +134,7 @@ class TreeNodeClassGenerator {
       final constructorName = _getConstructorName(type);
       final dartType = _getUnionNodeDartType(type);
       buffer.writeln('  /// Creates a ${schema.title} node with a $dartType value.');
-      buffer.write('  ${schema.title}Node.$constructorName($dartType $constructorName, {super.id})');
+      buffer.write('  ${schema.title}Node.$constructorName($dartType $constructorName)');
       buffer.write(' : _$constructorName = $constructorName');
 
       // Set other concrete type fields to null
@@ -158,7 +158,7 @@ class TreeNodeClassGenerator {
     for (final typeParam in typeParams) {
       final fieldName = _typeParamToFieldName(typeParam);
       buffer.writeln('  /// Creates a ${schema.title} node with a $typeParam value.');
-      buffer.write('  ${schema.title}Node.$fieldName($typeParam $fieldName, {super.id})');
+      buffer.write('  ${schema.title}Node.$fieldName($typeParam $fieldName)');
       buffer.write(' : _$fieldName = $fieldName');
 
       // Set concrete type fields to null
@@ -217,7 +217,6 @@ class TreeNodeClassGenerator {
     }
 
     // Generate clone method
-    buffer.writeln('  @override');
     buffer.writeln('  ${schema.title}Node clone() {');
 
     // Check concrete types
@@ -250,7 +249,6 @@ class TreeNodeClassGenerator {
     buffer.writeln();
 
     // Generate accept method
-    buffer.writeln('  @override');
     buffer.writeln('  T accept<T>(TreeNodeVisitor<T> visitor) {');
 
     for (int i = 0; i < types.length; i++) {
@@ -273,7 +271,6 @@ class TreeNodeClassGenerator {
     buffer.writeln();
 
     // Generate toString
-    buffer.writeln('  @override');
     buffer.write('  String toString() => \'${schema.title}Node(');
     for (int i = 0; i < types.length; i++) {
       final constructorName = _getConstructorName(types[i]);
