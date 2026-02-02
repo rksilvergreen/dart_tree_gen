@@ -20,10 +20,16 @@ class StandaloneTreeObjectGenerator {
     // Imports
     buffer.writeln("import 'package:dart_tree/dart_tree.dart';");
 
-    // For union schemas or schemas with type parameters, import the deserializers file
+    // For union schemas, schemas with type parameters, or schemas with typeArguments in properties, import the deserializers file
     final hasTypeParameterProperty = schema.properties.values.any((p) => p.type == SchemaType.typeParameter);
-    if (schema.isUnion || hasTypeParameterProperty) {
-      buffer.writeln("import '../${sourceBaseName}_deserializers.dart' as deserializers;");
+    final hasTypeArgumentsInProperties = schema.properties.values.any(
+      (p) => p.typeArguments != null && p.typeArguments!.isNotEmpty,
+    );
+    if (schema.isUnion ||
+        schema.typeParameters.isNotEmpty ||
+        hasTypeParameterProperty ||
+        hasTypeArgumentsInProperties) {
+      buffer.writeln("import '../${sourceBaseName}_deserializers.dart';");
     }
 
     // Generate class using existing generator

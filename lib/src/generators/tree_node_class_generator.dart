@@ -611,12 +611,27 @@ class TreeNodeClassGenerator {
         }
         return '$propAccess.toObject()';
       case SchemaType.object:
-        // Object nodes - call toObject(), with cast if type arguments present
-        final objectType = _getObjectType(property);
-        if (property.nullable) {
-          return '$propAccess?.toObject() as $objectType?';
+        // Object nodes - call toObject()
+        final hasTypeParamArgs =
+            property.typeArguments?.values.any((arg) => arg.type == SchemaType.typeParameter) ?? false;
+        final isUnion = property.referencedSchema?.isUnion == true;
+        final hasConcreteTypeArgs =
+            property.typeArguments != null && property.typeArguments!.isNotEmpty && !hasTypeParamArgs;
+
+        // Add cast if it's a union or has concrete type arguments
+        if (isUnion || hasConcreteTypeArgs) {
+          final objectType = _getObjectType(property);
+          if (property.nullable) {
+            return '$propAccess?.toObject() as $objectType?';
+          }
+          return '$propAccess.toObject() as $objectType';
         }
-        return '$propAccess.toObject() as $objectType';
+
+        // No cast for simple objects or objects with type parameter args
+        if (property.nullable) {
+          return '$propAccess?.toObject()';
+        }
+        return '$propAccess.toObject()';
       case SchemaType.array:
         // List nodes - map each element to object
         if (property.nullable) {
@@ -737,9 +752,14 @@ class TreeNodeClassGenerator {
         return property.typeParameterName!;
       case SchemaType.object:
         final baseType = '${property.referencedSchema!.title}Object';
+        // Include type arguments only if they're all concrete types (not type parameters)
         if (property.typeArguments != null && property.typeArguments!.isNotEmpty) {
-          final typeArgs = property.typeArguments!.values.map((argProp) => _getObjectType(argProp)).join(', ');
-          return '$baseType<$typeArgs>';
+          final hasTypeParams = property.typeArguments!.values.any((arg) => arg.type == SchemaType.typeParameter);
+          if (!hasTypeParams) {
+            // All concrete types, safe to include
+            final typeArgs = property.typeArguments!.values.map((argProp) => _getObjectType(argProp)).join(', ');
+            return '$baseType<$typeArgs>';
+          }
         }
         return baseType;
       case SchemaType.array:

@@ -5,10 +5,7 @@ class DeserializersGenerator {
   final List<SchemaInfo> schemas;
   final String sourceFileName;
 
-  DeserializersGenerator({
-    required this.schemas,
-    required this.sourceFileName,
-  });
+  DeserializersGenerator({required this.schemas, required this.sourceFileName});
 
   /// Generates the deserializers file content.
   String generate() {
@@ -20,17 +17,21 @@ class DeserializersGenerator {
     buffer.writeln();
     buffer.writeln("import 'package:dart_tree/dart_tree.dart';");
 
-    // Collect all types (including union member types), deduplicated by Dart type name
+    // Collect all types (including union member types) that don't have type parameters
+    // Types with type parameters can't be in the generic fromJson/fromYaml since they need deserializer args
     final allTypesByDartType = <String, SchemaInfo>{};
     for (final schema in schemas) {
-      if (!schema.isUnion) {
+      if (!schema.isUnion && schema.typeParameters.isEmpty) {
         final dartType = _getDartType(schema);
         allTypesByDartType[dartType] = schema;
-      } else {
+      } else if (schema.isUnion && schema.unionInfo!.typeParameters.isEmpty) {
+        // Only add unions without type parameters
+        final dartType = _getDartType(schema);
+        allTypesByDartType[dartType] = schema;
         // Add union member types
         for (final type in schema.unionInfo!.types) {
-          final dartType = _getDartType(type);
-          allTypesByDartType[dartType] = type;
+          final memberDartType = _getDartType(type);
+          allTypesByDartType[memberDartType] = type;
         }
       }
     }
@@ -46,14 +47,18 @@ class DeserializersGenerator {
 
     buffer.writeln();
 
+    // Generate typedef
+    buffer.writeln('typedef Deserializer<T> = T Function(String json);');
+    buffer.writeln();
+
     // Generate fromJson function
     buffer.writeln('/// Generic fromJson function that dispatches to the correct type.');
     buffer.writeln('T fromJson<T extends TreeObject>(String json) {');
-    
+
     for (final dartType in allTypesByDartType.keys) {
       buffer.writeln('  if (T == $dartType) return $dartType.fromJson(json) as T;');
     }
-    
+
     buffer.writeln("  throw UnsupportedError('Type \$T is not supported for fromJson in this schema');");
     buffer.writeln('}');
     buffer.writeln();
@@ -61,11 +66,11 @@ class DeserializersGenerator {
     // Generate fromYaml function
     buffer.writeln('/// Generic fromYaml function that dispatches to the correct type.');
     buffer.writeln('T fromYaml<T extends TreeObject>(String yaml) {');
-    
+
     for (final dartType in allTypesByDartType.keys) {
       buffer.writeln('  if (T == $dartType) return $dartType.fromYaml(yaml) as T;');
     }
-    
+
     buffer.writeln("  throw UnsupportedError('Type \$T is not supported for fromYaml in this schema');");
     buffer.writeln('}');
 
@@ -88,4 +93,3 @@ class DeserializersGenerator {
         .replaceFirst(RegExp(r'^_'), '');
   }
 }
-

@@ -255,7 +255,13 @@ class TreeObjectClassGenerator {
       buffer.write(typeParams.map((t) => '$t extends TreeObject').join(', '));
       buffer.write('>');
     }
-    buffer.writeln('(String json) {');
+    buffer.write('(String json');
+    if (typeParams.isNotEmpty) {
+      for (final typeParam in typeParams) {
+        buffer.write(', Deserializer<$typeParam> deserializer_$typeParam');
+      }
+    }
+    buffer.writeln(') {');
 
     int attemptIndex = 0;
     // Try concrete types
@@ -275,7 +281,7 @@ class TreeObjectClassGenerator {
 
       if (attemptIndex > 0) buffer.writeln('    } catch (_) {');
       buffer.writeln('    try {');
-      buffer.writeln('      return ${schema.title}Object.$fieldName(deserializers.fromJson<$typeParam>(json));');
+      buffer.writeln('      return ${schema.title}Object.$fieldName(deserializer_$typeParam(json));');
       attemptIndex++;
     }
 
@@ -302,7 +308,13 @@ class TreeObjectClassGenerator {
       buffer.write(typeParams.map((t) => '$t extends TreeObject').join(', '));
       buffer.write('>');
     }
-    buffer.writeln('(String yaml) {');
+    buffer.write('(String yaml');
+    if (typeParams.isNotEmpty) {
+      for (final typeParam in typeParams) {
+        buffer.write(', Deserializer<$typeParam> deserializer_$typeParam');
+      }
+    }
+    buffer.writeln(') {');
 
     attemptIndex = 0;
     // Try concrete types
@@ -322,7 +334,7 @@ class TreeObjectClassGenerator {
 
       if (attemptIndex > 0) buffer.writeln('    } catch (_) {');
       buffer.writeln('    try {');
-      buffer.writeln('      return ${schema.title}Object.$fieldName(deserializers.fromYaml<$typeParam>(yaml));');
+      buffer.writeln('      return ${schema.title}Object.$fieldName(deserializer_$typeParam(yaml));');
       attemptIndex++;
     }
 
@@ -613,7 +625,13 @@ class TreeObjectClassGenerator {
       buffer.write(schema.typeParameters.map((t) => '$t extends TreeObject').join(', '));
       buffer.write('>');
     }
-    buffer.writeln('(String json) {');
+    buffer.write('(String json');
+    if (schema.typeParameters.isNotEmpty) {
+      for (final typeParam in schema.typeParameters) {
+        buffer.write(', Deserializer<$typeParam> deserializer_$typeParam');
+      }
+    }
+    buffer.writeln(') {');
     buffer.writeln('    final map = extractJsonObjectFields(json);');
     buffer.writeln('    return \$checkedCreate(');
     buffer.writeln('      \'${schema.title}Object\',');
@@ -683,7 +701,13 @@ class TreeObjectClassGenerator {
       buffer.write(schema.typeParameters.map((t) => '$t extends TreeObject').join(', '));
       buffer.write('>');
     }
-    buffer.writeln('(String yaml) {');
+    buffer.write('(String yaml');
+    if (schema.typeParameters.isNotEmpty) {
+      for (final typeParam in schema.typeParameters) {
+        buffer.write(', Deserializer<$typeParam> deserializer_$typeParam');
+      }
+    }
+    buffer.writeln(') {');
     buffer.writeln('    final map = extractYamlMappingFields(yaml);');
     buffer.writeln('    return \$checkedCreate(');
     buffer.writeln('      \'${schema.title}Object\',');
@@ -775,12 +799,23 @@ class TreeObjectClassGenerator {
       case SchemaType.boolean:
         return 'BoolValue.fromJson($varName as String)';
       case SchemaType.typeParameter:
-        return 'deserializers.fromJson<${property.typeParameterName}>($varName as String)';
+        return 'deserializer_${property.typeParameterName}($varName as String)';
       case SchemaType.object:
         final baseType = '${property.referencedSchema!.title}Object';
         if (property.typeArguments != null && property.typeArguments!.isNotEmpty) {
           final typeArgs = property.typeArguments!.values.map((argProp) => _getDartType(argProp)).join(', ');
-          return '$baseType.fromJson<$typeArgs>($varName as String)';
+          final deserializerArgs = property.typeArguments!.values
+              .map((argProp) {
+                if (argProp.type == SchemaType.typeParameter) {
+                  return 'deserializer_${argProp.typeParameterName}';
+                } else {
+                  // For concrete types, create a lambda that calls the type's fromJson
+                  final concreteType = _getDartType(argProp);
+                  return '(String s) => $concreteType.fromJson(s)';
+                }
+              })
+              .join(', ');
+          return '$baseType.fromJson<$typeArgs>($varName as String, $deserializerArgs)';
         }
         return '$baseType.fromJson($varName as String)';
       case SchemaType.array:
@@ -811,12 +846,23 @@ class TreeObjectClassGenerator {
       case SchemaType.boolean:
         return 'BoolValue.fromYaml($varName as String)';
       case SchemaType.typeParameter:
-        return 'deserializers.fromYaml<${property.typeParameterName}>($varName as String)';
+        return 'deserializer_${property.typeParameterName}($varName as String)';
       case SchemaType.object:
         final baseType = '${property.referencedSchema!.title}Object';
         if (property.typeArguments != null && property.typeArguments!.isNotEmpty) {
           final typeArgs = property.typeArguments!.values.map((argProp) => _getDartType(argProp)).join(', ');
-          return '$baseType.fromYaml<$typeArgs>($varName as String)';
+          final deserializerArgs = property.typeArguments!.values
+              .map((argProp) {
+                if (argProp.type == SchemaType.typeParameter) {
+                  return 'deserializer_${argProp.typeParameterName}';
+                } else {
+                  // For concrete types, create a lambda that calls the type's fromYaml
+                  final concreteType = _getDartType(argProp);
+                  return '(String s) => $concreteType.fromYaml(s)';
+                }
+              })
+              .join(', ');
+          return '$baseType.fromYaml<$typeArgs>($varName as String, $deserializerArgs)';
         }
         return '$baseType.fromYaml($varName as String)';
       case SchemaType.array:

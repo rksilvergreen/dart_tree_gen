@@ -19,7 +19,6 @@ abstract class _$Schema {
 
 class $Schema extends _$Schema {
   final String name;
-  final Set<String> typeParameters;
   final List<String>? required;
   final List<String>? allowed;
   final List<String>? nullable;
@@ -27,7 +26,6 @@ class $Schema extends _$Schema {
 
   const $Schema({
     required this.name,
-    this.typeParameters = const {},
     this.required,
     this.allowed,
     this.nullable,
@@ -45,11 +43,6 @@ class $Union extends _$Schema {
 
 abstract class $Type {
   const $Type();
-}
-
-class $TypeParameter extends $Type {
-  final String name;
-  const $TypeParameter(this.name);
 }
 
 class $Object extends $Type {
