@@ -410,7 +410,13 @@ class TreeNodeClassGenerator {
     final unionSchema = property.referencedSchema!;
     final unionInfo = unionSchema.unionInfo!;
     final escapedName = _escapePropertyName(property.name);
-    final unionNodeType = '${unionSchema.title}Node';
+    String unionNodeType = '${unionSchema.title}Node';
+    if (property.typeArguments != null && property.typeArguments!.isNotEmpty) {
+      final typeArgs = unionInfo.typeParameters
+          .map((tp) => property.typeArguments![tp] != null ? _getNodeType(property.typeArguments![tp]!) : 'TreeNode')
+          .join(', ');
+      unionNodeType = '$unionNodeType<$typeArgs>';
+    }
     final nullMark = property.nullable ? '?' : '';
 
     buffer.writeln('  $unionNodeType$nullMark get ${property.name} {');
@@ -424,10 +430,12 @@ class TreeNodeClassGenerator {
       buffer.writeln('      $nodeType => $unionNodeType.$constructorName(child as $nodeType),');
     }
 
-    // Handle type parameters if any
+    // Handle type parameters - use concrete node types from typeArguments when available
     for (final typeParam in unionInfo.typeParameters) {
       final fieldName = _typeParamToFieldName(typeParam);
-      buffer.writeln('      TreeNode => $unionNodeType.$fieldName(child as TreeNode),');
+      final argProp = property.typeArguments?[typeParam];
+      final nodeType = argProp != null ? _getNodeType(argProp) : 'TreeNode';
+      buffer.writeln('      $nodeType => $unionNodeType.$fieldName(child as $nodeType),');
     }
 
     buffer.writeln('      _ => null,');

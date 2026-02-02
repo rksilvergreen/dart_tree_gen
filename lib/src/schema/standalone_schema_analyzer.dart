@@ -414,6 +414,25 @@ class StandaloneSchemaAnalyzer {
               );
             }
           }
+
+          // Validate no type argument duplicates an existing union concrete type
+          if (typeArguments != null) {
+            for (final entry in typeArguments.entries) {
+              final typeParam = entry.key;
+              final argInfo = entry.value;
+              final argSchemaTitle = _getTypeArgumentSchemaTitle(argInfo);
+              if (argSchemaTitle != null) {
+                final duplicates = refSchema.unionInfo!.types.where((t) => t.title == argSchemaTitle).toList();
+                if (duplicates.isNotEmpty) {
+                  throw Exception(
+                    'Property "$propertyName" references ${refSchema.title} with type parameter "$typeParam" '
+                    'mapped to $argSchemaTitle, but $argSchemaTitle is already a concrete type in the union. '
+                    'A union cannot have the same type as both a concrete member and a type parameter.',
+                  );
+                }
+              }
+            }
+          }
         }
 
         return PropertyInfo(
@@ -437,6 +456,28 @@ class StandaloneSchemaAnalyzer {
 
       default:
         throw Exception('Unsupported property type: $typeName for property $propertyName');
+    }
+  }
+
+  /// Returns the schema title for a type argument when it could duplicate a union's concrete type.
+  /// Returns null for array types (they are distinct from single-object types).
+  String? _getTypeArgumentSchemaTitle(PropertyInfo argInfo) {
+    switch (argInfo.type) {
+      case SchemaType.object:
+        return argInfo.referencedSchema?.title;
+      case SchemaType.string:
+        return 'String';
+      case SchemaType.integer:
+        return 'Integer';
+      case SchemaType.number:
+        return 'Number';
+      case SchemaType.boolean:
+        return 'Boolean';
+      case SchemaType.array:
+        // Array types (e.g. ReferencesListObject) are distinct from object types
+        return null;
+      case SchemaType.union:
+        return argInfo.referencedSchema?.title;
     }
   }
 }
