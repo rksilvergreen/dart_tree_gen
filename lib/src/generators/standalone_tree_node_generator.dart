@@ -21,7 +21,8 @@ class StandaloneTreeNodeGenerator {
     buffer.writeln("import 'package:dart_tree/dart_tree.dart';");
 
     // Generate class using existing generator
-    final classGenerator = TreeNodeClassGenerator(schema);
+    final treeClassName = _toPascalCase(sourceBaseName) + 'Tree';
+    final classGenerator = TreeNodeClassGenerator(schema, treeClassName: treeClassName);
 
     // Import referenced nodes (including unions)
     final importedNodes = <String>{};
@@ -80,6 +81,11 @@ class StandaloneTreeNodeGenerator {
 
     for (final refTitle in importedObjects) {
       buffer.writeln("import '../objects/${_toSnakeCase(refTitle)}_object.dart';");
+    }
+
+    // Import tree class for subtree creation in setters (only for schemas with properties)
+    if (!schema.isUnion && schema.properties.isNotEmpty) {
+      buffer.writeln("import '../trees/${_toSnakeCase(sourceBaseName)}_tree.dart';");
     }
 
     buffer.writeln();
@@ -158,5 +164,9 @@ class StandaloneTreeNodeGenerator {
     return input
         .replaceAllMapped(RegExp(r'[A-Z]'), (m) => '_${m.group(0)!.toLowerCase()}')
         .replaceFirst(RegExp(r'^_'), '');
+  }
+
+  String _toPascalCase(String input) {
+    return input.split('_').map((w) => w.isEmpty ? '' : w[0].toUpperCase() + w.substring(1)).join('');
   }
 }

@@ -75,7 +75,8 @@ class StandaloneTreeGenerator {
     final className = _toPascalCase(sourceBaseName) + 'Tree';
     buffer.writeln('/// Generated Tree class for $sourceBaseName schemas.');
     buffer.writeln('class $className extends Tree {');
-    buffer.writeln('  $className({required super.root});');
+    buffer.writeln('  $className({required Object root}) : super.fromObject(root: root);');
+    buffer.writeln('  factory $className.fromObject({required Object root}) => $className(root: root);');
     buffer.writeln();
     buffer.writeln('  @override');
     buffer.writeln('  void fromObject(Object object) {');

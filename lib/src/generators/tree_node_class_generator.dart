@@ -4,7 +4,11 @@ import '../schema/schema_info.dart';
 class TreeNodeClassGenerator {
   final SchemaInfo schema;
 
-  TreeNodeClassGenerator(this.schema);
+  /// Optional tree class name (e.g. BlogPostSchemaTree) for creating subtrees.
+  /// When set, generated setters use [treeClassName].fromObject(root: value).
+  final String? treeClassName;
+
+  TreeNodeClassGenerator(this.schema, {this.treeClassName});
 
   /// Gets the proper way to access a property in code expressions.
   /// Always use 'this.' prefix to avoid conflicts with local variables.
@@ -518,15 +522,15 @@ class TreeNodeClassGenerator {
       if (property.nullable) {
         buffer.writeln('      if (oldNode != null) {');
         buffer.writeln('        // Replace existing node');
-        buffer.writeln('        final newSubtree = Tree(root: value);');
+        buffer.writeln('        final newSubtree = ${treeClassName ?? 'Tree'}.fromObject(root: value);');
         buffer.writeln('        removedSubtree = tree.replaceSubtree(node: oldNode, newSubtree: newSubtree);');
         buffer.writeln('      } else {');
         buffer.writeln('        // Add new node (property was null before)');
-        buffer.writeln('        final newSubtree = Tree(root: value);');
+        buffer.writeln('        final newSubtree = ${treeClassName ?? 'Tree'}.fromObject(root: value);');
         buffer.writeln('        tree.addSubtree(parent: this, key: \'$escapedName\', subtree: newSubtree);');
         buffer.writeln('      }');
       } else {
-        buffer.writeln('      final newSubtree = Tree(root: value);');
+        buffer.writeln('      final newSubtree = ${treeClassName ?? 'Tree'}.fromObject(root: value);');
         buffer.writeln('      removedSubtree = tree.replaceSubtree(node: oldNode, newSubtree: newSubtree);');
       }
 
@@ -581,7 +585,7 @@ class TreeNodeClassGenerator {
       } else {
         buffer.writeln('      final oldNode = this.${property.name};');
       }
-      buffer.writeln('      final tempTree = Tree(root: value);');
+      buffer.writeln('      final tempTree = ${treeClassName ?? 'Tree'}.fromObject(root: value);');
       buffer.writeln('      final rootNode = tempTree.root;');
       buffer.writeln('      if (rootNode != null) {');
       buffer.writeln('        final subtree = tempTree.removeSubtree(rootNode);');
